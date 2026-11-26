@@ -10,6 +10,7 @@ try{Object.assign(prefs,JSON.parse(localStorage.getItem("cw-prefs")||"{}"))}catc
 const savePrefs=()=>{try{localStorage.setItem("cw-prefs",JSON.stringify(prefs))}catch(e){}};
 const applyBody=()=>document.documentElement.classList.toggle("black",prefs.body==="black");
 applyBody();
+if(navigator.standalone)document.documentElement.classList.add("standalone");
 /* 表示モード：画面いっぱい ⇔ 白い机に置いた実物大。本体の何もないところ（または白い机）をタップで切り替え */
 const applyMode=()=>document.documentElement.classList.toggle("framed",!!prefs.framed);
 applyMode();
