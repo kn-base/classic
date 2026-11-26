@@ -31,15 +31,32 @@ document.addEventListener("pointerup",e=>{const s=tapStart;tapStart=null;if(!s||
   if(Math.hypot(e.clientX-s.x,e.clientY-s.y)<10&&Date.now()-s.t<500)toggleMode()});
 
 /* ---------- 音（クリック音） ---------- */
-let actx=null;
-function tick(){
-  if(!prefs.click)return;
+/* iPhone では、
+   ・画面に触れた瞬間（タップ）にしか音の準備を始められない（ホイールを回す動きは含まれない）
+   ・アプリの切り替えや曲の再生のあとに、音の準備が止まることがある
+   ・アプリ内で作った効果音はマナーモードで消える
+   そこで、触れるたびに準備を確かめて再開し、効果音を「音楽の再生」と同じ扱いにしてマナーモードでも鳴らす */
+let actx=null,clickBuf=null;
+try{if(navigator.audioSession)navigator.audioSession.type="playback"}catch(e){}
+function audioReady(){
   try{
-    actx=actx||new (window.AudioContext||window.webkitAudioContext)();
-    if(actx.state==="suspended")actx.resume();
-    const n=Math.floor(actx.sampleRate*.004),b=actx.createBuffer(1,n,actx.sampleRate),d=b.getChannelData(0);
-    for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*(1-i/n)**2*.5;
-    const s=actx.createBufferSource();s.buffer=b;s.connect(actx.destination);s.start();
+    if(!actx){
+      actx=new (window.AudioContext||window.webkitAudioContext)();
+      const n=Math.floor(actx.sampleRate*.004);clickBuf=actx.createBuffer(1,n,actx.sampleRate);
+      const d=clickBuf.getChannelData(0);for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*(1-i/n)**2*.5;
+      // 無音を一度鳴らして、iPhone の音の準備を始めさせる
+      const s=actx.createBufferSource();s.buffer=actx.createBuffer(1,1,actx.sampleRate);s.connect(actx.destination);s.start();
+    }
+    if(actx.state!=="running")actx.resume();
+  }catch(e){}
+}
+["pointerdown","touchstart","touchend","click","keydown"].forEach(ev=>document.addEventListener(ev,audioReady,{capture:true,passive:true}));
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&actx&&actx.state!=="running")actx.resume().catch(()=>{})});
+function tick(){
+  if(!prefs.click||!actx)return;
+  try{
+    if(actx.state!=="running"){actx.resume();return}
+    const s=actx.createBufferSource();s.buffer=clickBuf;s.connect(actx.destination);s.start();
   }catch(e){}
 }
 
