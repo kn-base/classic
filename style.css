@@ -362,3 +362,9 @@ body::before{
     3.5cqw 9cqw 16cqw rgba(0,0,0,.14);
 }
 :root.framed .ipod::before{box-shadow:inset 0 0 0 .6cqw rgba(255,255,255,.10)}
+
+/* 本体の角の丸みは「本体の幅」を基準にする。
+   （本体自身のスタイルの cqw は本体ではなく画面の幅で計算されてしまい、幅の広い iPhone ほど角が丸くなっていた）
+   見た目は確認画像で良いと言われた比率（本体の幅の約10%）に固定する */
+:root.framed{--dw:min(373px,calc(100vw - 32px),calc((100dvh - 56px) * .597))}
+:root.framed .ipod{width:var(--dw);border-radius:calc(var(--dw) * .1)}
