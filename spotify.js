@@ -57,15 +57,20 @@ const SP=(()=>{
   }
 
   /* ---------- Web API ---------- */
+  /* 通信の記録（原因調べ用。直近20件。トークンなどの秘密は記録しない） */
+  const log=[];
+  const note=(m,p,st,why)=>{log.unshift({t:new Date().toTimeString().slice(0,8),m,p:p.replace(/^https:\/\/api\.spotify\.com\/v1/,"").replace(/device_id=[^&]+/,"device_id=…").slice(0,60),st,why:(why||"").slice(0,80)});if(log.length>20)log.pop()};
   async function api(path,opt={}){
     const t=await access();
     const r=await fetch(path.startsWith("https://api.spotify.com/")?path:"https://api.spotify.com/v1"+path,
       {method:opt.method||"GET",body:opt.body,headers:{Authorization:"Bearer "+t,...(opt.body?{"Content-Type":"application/json"}:{})}});
-    if(r.status===204||r.status===202)return null;
+    const m=opt.method||"GET";
+    if(r.status===204||r.status===202){if(m!=="GET")note(m,path,r.status);return null}
     let j=null;try{j=await r.json()}catch(e){}
     if(!r.ok){
       const er=j&&j.error;const e=new Error((er&&(er.message||er))||("HTTP "+r.status));
-      e.status=r.status;e.reason=er&&er.reason;throw e}
+      e.status=r.status;e.reason=er&&er.reason;note(m,path,r.status,(e.reason?e.reason+" ":"")+e.message);throw e}
+    if(m!=="GET")note(m,path,r.status);
     return j;
   }
   async function pages(path,max=600){
@@ -128,9 +133,10 @@ const SP=(()=>{
       if(e.status!==404&&e.reason!=="NO_ACTIVE_DEVICE")throw e;
       const ds=(await devices()).filter(d=>!d.is_restricted);
       const d=ds.find(x=>x.is_active)||ds.find(x=>/smartphone/i.test(x.type))||ds[0];
-      if(!d)throw Object.assign(new Error("再生できる端末がありません"),{nodevice:true});
-      // まず「この端末で再生して」と再生先を切り替えてから、もう一度指示を送る
-      try{await api("/me/player",{method:"PUT",body:JSON.stringify({device_ids:[d.id],play:false})});await new Promise(r=>setTimeout(r,400))}catch(_){}
+      if(!d)throw Object.assign(new Error("再生できる端末がありません（"+e.message+"）"),{nodevice:true});
+      // 動いていない端末なら、まず「この端末で再生して」と再生先を切り替える
+      if(!d.is_active){try{await api("/me/player",{method:"PUT",body:JSON.stringify({device_ids:[d.id],play:false})})}catch(_){}}
+      await new Promise(r=>setTimeout(r,500));
       try{await api(path+(path.includes("?")?"&":"?")+"device_id="+encodeURIComponent(d.id),opt)}
       catch(e2){if(e2.status===404||e2.reason==="NO_ACTIVE_DEVICE")e2.nodevice=true;throw e2}
     }
@@ -154,6 +160,6 @@ const SP=(()=>{
   return {
     connected:()=>!!tok,login,logout,handleRedirect,setOnChange:f=>{onChange=f},
     playlists,playlistTracks,savedTracks,savedAlbums,refresh,progress,get state(){return state},get lastErr(){return lastErr},
-    devices,playContext,playUris,toggle,next,prev,seek,me,api,
+    devices,playContext,playUris,toggle,next,prev,seek,me,api,log,
   };
 })();

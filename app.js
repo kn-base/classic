@@ -190,6 +190,7 @@ function asyncItems(c,mk){
   if(c.err)return [{label:spErrText(c.err),dis:true}];
   const it=mk(c.data);return it.length?it:[{label:"（ありません）",dis:true}];
 }
+const chunks=(t,n)=>{const a=[...t],o=[];for(let i=0;i<a.length;i+=n)o.push(a.slice(i,i+n).join(""));return o};
 const byName=(a,b)=>a.name.localeCompare(b.name,"ja");
 /* すべての曲＝保存した曲＋保存したアルバムの曲（重複は1つに）。並べ替えた結果は覚えておき、ホイールを回すたびに並べ直さない */
 let allMemo={a:null,t:null,v:null};
@@ -242,10 +243,13 @@ async function spRun(fn,goNow){
   catch(e){
     if(isSleep(e)){
       spPending={fn,at:Date.now()};
-      if(!(cv().type==="menu"&&cv().sleep)){const v=menu("Spotify",()=>[
+      const why="理由："+(e.status||"")+" "+(e.reason||"")+" "+(e.message||"");
+      if(cv().type==="menu"&&cv().sleep)cv().why=why;
+      else{const v=menu("Spotify",()=>[
         {label:"Spotify アプリを開く",act:openSpotify},
         {label:"もう一度試す",act:()=>spRetry(true)},
-        {label:"戻ると自動で再生します",dis:true}]);v.sleep=true;push(v)}
+        {label:"戻ると自動で再生します",dis:true},
+        {label:v.why,dis:true}]);v.sleep=true;v.why=why;push(v)}
       toast("Spotify アプリが眠っています。開いてから戻ってください");
     }else toast(spErrText(e));
   }
@@ -268,6 +272,9 @@ async function spRetry(manual){
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&spPending&&SPM())setTimeout(()=>spRetry(false),600)});
 function spSettingsView(){return menu("Spotify",()=>SPM()?[
   {label:"接続テスト",sub:spTestView},
+  {label:"通信の記録",sub:()=>menu("通信の記録",()=>SP.log.length?SP.log.map(x=>({label:(x.st<300?"○ ":"× ")+x.st+" "+x.m+" "+x.p,right:x.t,
+    sub:()=>menu("記録の詳細",()=>[{label:"時刻",right:x.t},{label:"指示",right:x.m},{label:"結果",right:String(x.st)},
+      ...chunks("宛先 "+x.p,22).map(t=>({label:t,dis:true})),...(x.why?chunks("理由 "+x.why,22).map(t=>({label:t,dis:true})):[])])})):[{label:"（まだありません）",dis:true}])},
   {label:"Spotify アプリを開く",act:openSpotify},
   {label:"ログアウト",sub:()=>menu("ログアウトしますか？",()=>[{label:"キャンセル",act:pop},
     {label:"ログアウトする",act:()=>{SP.logout();stack=[rootView()];toast("ログアウトしました");render()}}])},
