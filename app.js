@@ -46,20 +46,24 @@ function setAudioSession(){
   try{if(navigator.audioSession)navigator.audioSession.type=(typeof SP!=="undefined"&&SP.connected())?"ambient":"playback"}catch(e){}
 }
 setAudioSession();
+/* 音の準備を始めた瞬間に iPhone で「ボッ」と小さな破裂音が出ることがあるため、
+   アプリを開いたときには準備せず、ホイールや真ん中のボタンに触れたとき（最初のカチッの直前）にだけ準備する。
+   裏に回ったら止めておき、戻ってもすぐには再開しない */
 function audioReady(){
+  if(!prefs.click)return;
   try{
     if(!actx){
+      setAudioSession();
       actx=new (window.AudioContext||window.webkitAudioContext)();
       const n=Math.floor(actx.sampleRate*.004);clickBuf=actx.createBuffer(1,n,actx.sampleRate);
       const d=clickBuf.getChannelData(0);for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*(1-i/n)**2*.5;
-      // 無音を一度鳴らして、iPhone の音の準備を始めさせる
-      const s=actx.createBufferSource();s.buffer=actx.createBuffer(1,1,actx.sampleRate);s.connect(actx.destination);s.start();
     }
     if(actx.state!=="running")actx.resume();
   }catch(e){}
 }
-["pointerdown","touchstart","touchend","click","keydown"].forEach(ev=>document.addEventListener(ev,audioReady,{capture:true,passive:true}));
-document.addEventListener("visibilitychange",()=>{if(!document.hidden&&actx&&actx.state!=="running")actx.resume().catch(()=>{})});
+["pointerdown","touchstart"].forEach(ev=>document.getElementById("wheel").addEventListener(ev,audioReady,{capture:true,passive:true}));
+document.addEventListener("keydown",audioReady,{capture:true});
+document.addEventListener("visibilitychange",()=>{if(document.hidden&&actx&&actx.state==="running")actx.suspend().catch(()=>{})});
 function tick(){
   if(!prefs.click||!actx)return;
   try{
