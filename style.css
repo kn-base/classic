@@ -381,3 +381,16 @@ body::before{
 :root.standalone body::before{inset:auto;top:0;left:0;width:100vw;height:calc(100vh + env(safe-area-inset-top,0px) + 80px)}
 :root.standalone.framed body::before{display:block;background:radial-gradient(ellipse 90% 70% at 40% 35%,#ffffff 0%,#f8f8f9 55%,#ededef 100%)}
 :root.standalone.framed{background:#ededef}
+
+/* iPhone の全画面表示：一番下の帯（iPhone が塗る単色）に向かって、背景をゆっくり同じ色へ溶け込ませ、境目を消す。
+   背景の面は画面より下に長く伸ばしてあるので、見えている下端はおよそ面の 80% の位置になる */
+@media (display-mode: standalone){
+  :root.framed body::before{background:
+    linear-gradient(180deg,rgba(237,237,239,0) 52%,#ededef 76%),
+    radial-gradient(ellipse 90% 70% at 40% 35%,#ffffff 0%,#f8f8f9 55%,#ededef 100%)}
+  :root:not(.framed):not(.black) body::before{background:linear-gradient(180deg,rgba(180,181,184,0) 58%,#b4b5b8 77%),var(--alu);background-size:auto,var(--alu-size)}
+  :root.black:not(.framed) body::before{background:linear-gradient(180deg,rgba(24,25,26,0) 58%,#18191a 77%),var(--alu);background-size:auto,var(--alu-size)}
+}
+:root.standalone.framed body::before{background:
+  linear-gradient(180deg,rgba(237,237,239,0) 52%,#ededef 76%),
+  radial-gradient(ellipse 90% 70% at 40% 35%,#ffffff 0%,#f8f8f9 55%,#ededef 100%)}
