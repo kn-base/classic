@@ -8,11 +8,18 @@ let ROWS=6;const STEP=Math.PI/12;
 const prefs={click:true,body:"silver",framed:false};
 try{Object.assign(prefs,JSON.parse(localStorage.getItem("cw-prefs")||"{}"))}catch(e){}
 const savePrefs=()=>{try{localStorage.setItem("cw-prefs",JSON.stringify(prefs))}catch(e){}};
-const applyBody=()=>document.documentElement.classList.toggle("black",prefs.body==="black");
+const applyBody=()=>{document.documentElement.classList.toggle("black",prefs.body==="black");if(typeof paintEdge==="function")paintEdge()};
 applyBody();
 if(navigator.standalone)document.documentElement.classList.add("standalone");
 /* 表示モード：画面いっぱい ⇔ 白い机に置いた実物大。本体の何もないところ（または白い机）をタップで切り替え */
-const applyMode=()=>document.documentElement.classList.toggle("framed",!!prefs.framed);
+const applyMode=()=>{document.documentElement.classList.toggle("framed",!!prefs.framed);paintEdge()};
+/* iPhone の全画面表示では、画面の一番下がアプリの外側になり、iPhone がページの背景色で塗る。
+   その色を本体の下の端の色に合わせて、帯が見えないようにする（色は style.css の陰影の下端と同じ） */
+function paintEdge(){
+  const c=prefs.framed?"#ededef":(prefs.body==="black"?"#18191a":"#b4b5b8");
+  document.documentElement.style.backgroundColor=c;
+  let m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",c);
+}
 applyMode();
 function toggleMode(){
   const go=()=>{prefs.framed=!prefs.framed;savePrefs();applyMode();if(typeof render==="function")render()};
