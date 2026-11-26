@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<title>Classic</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Classic">
+<meta name="theme-color" content="#cfd0d3">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="ipod" id="ipod">
+  <div class="bezel"><div class="lcd" id="lcd">
+    <div class="hdr"><span class="st" id="st"></span><span class="t" id="ttl">Classic</span><span class="batt" aria-hidden="true"></span></div>
+    <div class="view" id="view"></div>
+  </div></div>
+  <div class="wheel-area"><div class="wheel" id="wheel" tabindex="0" aria-label="クリックホイール。上下キーで選択、Enterで決定、Escでメニュー">
+    <span class="lab m">MENU</span>
+    <span class="lab n"><svg viewBox="0 0 24 24"><path d="M3 5l8 7-8 7zM11 5l8 7-8 7zM19 5h2v14h-2z"/></svg></span>
+    <span class="lab b"><svg viewBox="0 0 24 24"><path d="M21 5l-8 7 8 7zM13 5l-8 7 8 7zM3 5h2v14H3z"/></svg></span>
+    <span class="lab p"><svg viewBox="0 0 24 24"><path d="M3 5l9 7-9 7zM14 5h3v14h-3zM19 5h3v14h-3z"/></svg></span>
+    <span class="press" id="press"></span>
+    <button class="center" id="center" aria-label="決定"></button>
+  </div></div>
+</div>
+<input type="file" id="file" accept="audio/*" multiple hidden>
+<script src="vendor/jsmediatags.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

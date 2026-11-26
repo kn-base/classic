@@ -1,0 +1,345 @@
+/* 画面全体が本体の正面。上に液晶の窓、下の余白の中央にクリックホイール */
+:root{
+  --front:#cfd0d3; --edge:rgba(0,0,0,.13); --lift:rgba(255,255,255,.42);
+  --wheel:#f8f9fa; --wheel-label:#8d9095;
+  --btn-hi:#e6e7e9; --btn:#c9cacd; --btn-lo:#b9babe;
+  --rim:#eceef0; --glass:#0e0f10;
+  --lcd:#f3f6f8; --lcd-ink:#121417; --lcd-sub:#5b616a;
+  --bar-a:#fdfdfe; --bar-b:#c6cbd2;
+  --sel-a:#79bbf6; --sel-b:#1964cc; --sel-ink:#ffffff;
+  --meter:#2b7be0; --meter-track:#d5dade;
+  --f-ui:"Helvetica Neue",-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN",system-ui,sans-serif;
+  --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.15' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .11 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  color-scheme:light;
+}
+:root.black{
+  --front:#2c2d30; --edge:rgba(0,0,0,.45); --lift:rgba(255,255,255,.08);
+  --wheel:#1b1c1e; --wheel-label:#8a8d92;
+  --btn-hi:#3a3b3e; --btn:#2a2b2e; --btn-lo:#1f2022;
+  --rim:#3a3b3e;
+  color-scheme:dark;
+}
+html,body{height:100%;margin:0}
+html{background:var(--front);overscroll-behavior:none}
+body{
+  background:var(--front);font-family:var(--f-ui);isolation:isolate;
+  display:flex;justify-content:center;overflow:hidden;
+  padding-left:max(0px,env(safe-area-inset-left,0px));padding-right:max(0px,env(safe-area-inset-right,0px));
+  padding-block:0;box-sizing:border-box;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+}
+/* アルマイト加工のアルミ：画面の端から端まで（上下のステータスバーやホームバーの裏も含めて）一枚の面として塗る。
+   中央がわずかに明るく、四辺に向かって落ちる陰影＋細かい梨地 */
+body::before{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:var(--alu);background-size:var(--alu-size);
+}
+:root{
+  --alu:
+    radial-gradient(ellipse 95% 70% at 48% 42%,var(--lift),rgba(255,255,255,0) 70%),
+    linear-gradient(90deg,var(--edge),rgba(0,0,0,0) 9%,rgba(0,0,0,0) 91%,var(--edge)),
+    linear-gradient(180deg,rgba(255,255,255,.3),rgba(255,255,255,0) 6%,rgba(0,0,0,0) 82%,var(--edge)),
+    var(--grain),
+    var(--front);
+  --alu-size:auto,auto,auto,180px 180px,auto;
+  --table:#ffffff;
+}
+.ipod{
+  width:min(100%,calc(100dvh * .62));height:100%;container-type:inline-size;
+  display:flex;flex-direction:column;align-items:center;
+}
+.bezel{
+  /* 窓：明るい縁取り → 細い黒枠 → 液晶。本体より一段へこむ */
+  margin-top:calc(env(safe-area-inset-top,0px) + 6cqw);
+  /* 縦長の画面では液晶を縦に伸ばして、間延びしないようにする */
+  width:86cqw;flex:1 1 auto;min-height:62cqw;max-height:98cqw;box-sizing:border-box;padding:1.3cqw;
+  background:var(--glass);border-radius:1.4cqw;
+  box-shadow:
+    0 0 0 .55cqw var(--rim),
+    0 0 0 .75cqw rgba(0,0,0,.14),
+    0 .5cqw .6cqw .6cqw rgba(255,255,255,.35),
+    inset 0 .4cqw .6cqw rgba(0,0,0,.9);
+}
+.lcd{
+  width:100%;height:100%;background:var(--lcd);color:var(--lcd-ink);
+  border-radius:.5cqw;overflow:hidden;position:relative;display:flex;flex-direction:column;
+  transition:filter .8s;box-shadow:0 0 0 .2cqw rgba(0,0,0,.6);
+}
+.lcd.dim{filter:brightness(.6)}
+/* 液晶の細かい画素とガラスの映り込み */
+.lcd::before{content:"";position:absolute;inset:0;pointer-events:none;z-index:4;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.035) 0 1px,transparent 1px 3px),repeating-linear-gradient(90deg,rgba(0,0,0,.025) 0 1px,transparent 1px 3px)}
+.lcd::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:5;
+  background:
+    linear-gradient(114deg,rgba(255,255,255,0) 58%,rgba(255,255,255,.2) 58.3%,rgba(255,255,255,.07) 80%,rgba(255,255,255,.12) 100%),
+    linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,0) 30%)}
+.hdr{
+  height:8cqw;flex:none;display:grid;grid-template-columns:9cqw 1fr 9cqw;align-items:center;
+  background:linear-gradient(var(--bar-a) 0%,#e9ecef 50%,var(--bar-b) 100%);border-bottom:.2cqw solid #8b929b;
+  font-size:3.8cqw;font-weight:700;letter-spacing:.01em;
+}
+.hdr .t{text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hdr .st{justify-self:center;font-size:3cqw;color:#2f6fc6}
+.batt{justify-self:center;width:6cqw;height:2.9cqw;border:.3cqw solid #4c5056;border-radius:.6cqw;position:relative;box-sizing:border-box;background:#fff}
+.batt::before{content:"";position:absolute;inset:.3cqw;background:linear-gradient(#a4ec8c,#37a823);border-radius:.15cqw}
+.batt::after{content:"";position:absolute;right:-1cqw;top:.6cqw;width:.6cqw;height:1cqw;background:#4c5056;border-radius:0 .3cqw .3cqw 0}
+.view{flex:1;position:relative;min-height:0}
+.rows{position:absolute;inset:0 3cqw 0 0}
+.row{
+  height:calc(100% / var(--rows,6));display:flex;align-items:center;gap:2cqw;padding:0 2.4cqw 0 2.6cqw;box-sizing:border-box;
+  font-size:4.2cqw;font-weight:600;white-space:nowrap;
+}
+.row .l{flex:1;overflow:hidden;text-overflow:ellipsis}
+.row .r{color:var(--lcd-sub);font-weight:500;font-size:3.6cqw}
+.row .a{font-weight:800;font-size:5cqw;line-height:1}
+.row.sel{background:linear-gradient(var(--sel-a) 0%,#3d8ae6 50%,var(--sel-b) 51%,#2a78dc 100%);color:var(--sel-ink);text-shadow:0 -.15cqw 0 rgba(0,0,0,.25)}
+.row.sel .r{color:var(--sel-ink)}
+.row.dis{color:var(--lcd-sub);font-weight:500}
+.sb{position:absolute;right:0;top:0;bottom:0;width:3cqw;background:linear-gradient(90deg,#d9dde2,#f2f4f6);border-left:.2cqw solid #aab0b8}
+.sb i{position:absolute;left:.45cqw;right:.45cqw;background:linear-gradient(90deg,#8cc2f5,#2369d0);border-radius:.6cqw;box-shadow:inset 0 0 0 .15cqw rgba(0,0,0,.15)}
+.empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;font-size:3.8cqw;color:var(--lcd-sub);padding:4cqw;line-height:1.5}
+/* 再生画面 */
+.np{position:absolute;inset:0;padding:2cqw 3.4cqw 2.4cqw;display:flex;flex-direction:column;gap:1.6cqw;box-sizing:border-box}
+.np .cnt{font-size:3.3cqw;font-weight:600;color:var(--lcd-sub)}
+.np .main{flex:1;display:flex;gap:3.4cqw;align-items:center;min-height:0}
+.art{width:31cqw;height:31cqw;flex:none;position:relative;transform:perspective(60cqw) rotateY(16deg);transform-origin:left center;
+  -webkit-box-reflect:below .4cqw linear-gradient(transparent 70%,rgba(255,255,255,.35))}
+.art img,.art .ph{width:100%;height:100%;object-fit:cover;display:block;box-shadow:0 .8cqw 1.6cqw rgba(0,0,0,.28)}
+.art .ph{display:grid;place-items:center;color:#fff;font-size:11cqw;font-weight:800;text-shadow:0 .4cqw 1cqw rgba(0,0,0,.25)}
+.meta{min-width:0;display:flex;flex-direction:column;gap:1cqw}
+.meta div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta .ti{font-size:4.3cqw;font-weight:800}
+.meta .ar,.meta .al{font-size:3.6cqw;font-weight:600;color:var(--lcd-sub)}
+.meter{height:3.2cqw;border-radius:.4cqw;background:linear-gradient(#c9ced4,#eef1f3);position:relative;overflow:hidden;
+  box-shadow:inset 0 0 0 .2cqw rgba(0,0,0,.25)}
+.meter i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(#9fd0fa 0%,#4a95ea 50%,#1f68d2 51%,#3c86e4 100%);box-shadow:inset 0 0 0 .2cqw rgba(0,0,0,.2)}
+.meter b{position:absolute;top:50%;width:3cqw;height:3cqw;background:#fff;border:.35cqw solid var(--meter);transform:translate(-50%,-50%) rotate(45deg);box-sizing:border-box}
+.times{display:flex;justify-content:space-between;font-size:3.2cqw;font-weight:600;font-variant-numeric:tabular-nums;color:var(--lcd-sub)}
+.volrow{display:flex;align-items:center;gap:2cqw;font-size:3.6cqw}
+.volrow .meter{flex:1}
+.toast{position:absolute;left:6cqw;right:6cqw;top:50%;transform:translateY(-50%);background:rgba(20,22,26,.86);color:#fff;
+  border-radius:2cqw;padding:3.4cqw;text-align:center;font-size:3.8cqw;font-weight:600;line-height:1.45;z-index:3}
+/* クリックホイール：本体とほぼ面一。表面はつや消し、縁にごく細い溝 */
+.wheel-area{flex:0 1 auto;height:calc(100cqw + env(safe-area-inset-bottom,0px));width:100%;display:flex;align-items:center;justify-content:center;min-height:0;
+  padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box}
+.wheel{
+  /* 白い樹脂のホイール：平らで、縁だけわずかに影 */
+  position:relative;height:min(76cqw,86%);width:auto;aspect-ratio:1;flex:none;border-radius:50%;
+  background:radial-gradient(circle at 50% 40%,var(--wheel) 0%,var(--wheel) 62%,color-mix(in srgb,var(--wheel) 94%,#000) 100%);
+  box-shadow:
+    0 0 0 .2cqw rgba(0,0,0,.07),
+    0 .6cqw 1.4cqw rgba(0,0,0,.10),
+    0 -.3cqw .5cqw rgba(255,255,255,.35),
+    inset 0 -.3cqw .6cqw rgba(0,0,0,.04);
+  touch-action:none;cursor:grab;
+}
+.wheel .press{position:absolute;inset:0;border-radius:50%;pointer-events:none;opacity:0;transition:opacity .25s}
+.wheel .press.on{opacity:1;transition:none}
+.wheel .lab{position:absolute;color:var(--wheel-label);font-weight:600;font-size:4.5cqw;letter-spacing:.05em;pointer-events:none}
+.wheel .lab svg{width:5.6cqw;height:5.6cqw;display:block;fill:currentColor}
+.lab.m{top:6.5%;left:50%;transform:translateX(-50%)}
+.lab.p{bottom:6.5%;left:50%;transform:translateX(-50%)}
+.lab.n{right:6.5%;top:50%;transform:translateY(-50%)}
+.lab.b{left:6.5%;top:50%;transform:translateY(-50%)}
+.center{
+  /* 中央ボタン：本体と同じアルミ。左上から光が当たる */
+  position:absolute;left:50%;top:50%;width:36%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;
+  background:
+    var(--grain),
+    radial-gradient(circle at 38% 30%,var(--btn-hi) 0%,var(--btn) 58%,var(--btn-lo) 100%);
+  background-size:120px 120px,auto;
+  border:none;padding:0;cursor:pointer;
+  box-shadow:
+    0 0 0 .2cqw rgba(0,0,0,.08),
+    0 .2cqw .3cqw rgba(255,255,255,.6),
+    inset 0 .35cqw .5cqw rgba(255,255,255,.45),
+    inset 0 -.4cqw .7cqw rgba(0,0,0,.08);
+}
+.center:active{filter:brightness(.94)}
+.center:focus-visible,.wheel:focus-visible{outline:.6cqw solid #6fb3f4;outline-offset:.6cqw}
+@media (prefers-reduced-motion:reduce){.lcd{transition:none}}
+
+/* ===== 実物大モード：白い机の上に本物と同じ比率の本体を置く =====
+   本体 61.8×103.5mm。iPhone はおよそ 1mm＝6px なので、幅 373px でほぼ実物大になる（入らないときは縮める）
+   液晶の窓・ホイールの位置と大きさは本物の正面写真の比率に合わせる */
+:root.framed,:root.framed body{background:var(--table)}
+:root.framed body{align-items:center}
+:root.framed body::before{display:none}
+:root.framed .ipod{
+  width:min(373px,calc(100vw - 32px),calc((100dvh - 56px) * .597));height:auto;aspect-ratio:61.8/103.5;
+  border-radius:9cqw;background:var(--alu);background-size:var(--alu-size);position:relative;
+  box-shadow:
+    inset 0 0 0 .3cqw rgba(255,255,255,.45),
+    inset 0 .6cqw .8cqw rgba(255,255,255,.35),
+    inset 0 -.8cqw 1.6cqw rgba(0,0,0,.10),
+    0 .3cqw .6cqw rgba(0,0,0,.16),
+    0 3cqw 6cqw rgba(0,0,0,.14);
+}
+:root.framed .bezel{margin-top:7.4cqw;width:85cqw;flex:none;aspect-ratio:1.3;min-height:0;max-height:none}
+:root.framed .wheel-area{flex:none;height:auto;margin-top:14.6cqw;padding-bottom:0}
+:root.framed .wheel{height:61cqw}
+:root.framed .center{width:36%}
+::view-transition-old(root),::view-transition-new(root){animation-duration:.45s}
+
+/* ===== 実物大モードの質感と立体感 =====
+   本体は「鏡面ステンレスの背面ケース」の上に「アルマイトの前面パネル」がはまった二層構造。
+   光は左上から。パネルの縁は面取りで上が明るく下が暗い。机には接地の濃い影と、ふんわり広がる影を落とす */
+:root{
+  --grain-fine:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='2.4' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --mottle:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.012' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --chrome:linear-gradient(128deg,#fdfdfd 0%,#b9bbbf 14%,#f7f7f8 27%,#7d8085 46%,#d9dadc 62%,#5f6267 80%,#c4c6c9 100%);
+}
+:root.framed,:root.framed body{
+  background:radial-gradient(ellipse 120% 90% at 35% 20%,#ffffff 0%,#f6f6f7 55%,#e9e9eb 100%);
+}
+:root.framed .ipod{
+  background:var(--chrome);isolation:isolate;
+  border-radius:9.4cqw;
+  box-shadow:
+    0 0 0 .12cqw rgba(0,0,0,.35),
+    0 .25cqw .35cqw rgba(0,0,0,.38),
+    .8cqw 2.2cqw 3cqw rgba(0,0,0,.20),
+    2.5cqw 7cqw 11cqw rgba(0,0,0,.16);
+}
+/* 前面パネル（アルマイト） */
+:root.framed .ipod::before{
+  content:"";position:absolute;inset:1.15cqw;z-index:0;border-radius:8.4cqw;pointer-events:none;
+  background:
+    linear-gradient(118deg,rgba(255,255,255,.28) 0%,rgba(255,255,255,0) 30%,rgba(255,255,255,0) 62%,rgba(255,255,255,.12) 70%,rgba(255,255,255,0) 80%),
+    var(--grain-fine),var(--mottle),var(--alu);
+  background-size:auto,90px 90px,400px 400px,var(--alu-size);
+  box-shadow:
+    0 0 0 .14cqw rgba(0,0,0,.28),
+    inset 0 .45cqw .35cqw rgba(255,255,255,.75),
+    inset .35cqw 0 .35cqw rgba(255,255,255,.35),
+    inset 0 -.5cqw .55cqw rgba(0,0,0,.20),
+    inset -.35cqw 0 .45cqw rgba(0,0,0,.10);
+}
+:root.framed .bezel,:root.framed .wheel-area{position:relative;z-index:1}
+/* 液晶の窓：パネルから一段深く沈む */
+:root.framed .bezel{
+  box-shadow:
+    0 0 0 .55cqw var(--rim),
+    0 0 0 .75cqw rgba(0,0,0,.2),
+    0 .45cqw .4cqw .55cqw rgba(255,255,255,.55),
+    0 -.35cqw .5cqw .5cqw rgba(0,0,0,.12),
+    inset 0 .6cqw .9cqw rgba(0,0,0,.95);
+}
+/* ホイール：パネルの穴にはまっていて、上の縁に影、下の縁に光 */
+:root.framed .wheel{
+  background:
+    var(--grain-fine),
+    radial-gradient(circle at 45% 35%,#ffffff 0%,var(--wheel) 55%,color-mix(in srgb,var(--wheel) 90%,#000) 100%);
+  background-size:90px 90px,auto;
+  box-shadow:
+    0 0 0 .25cqw rgba(0,0,0,.14),
+    0 .4cqw .4cqw .25cqw rgba(255,255,255,.55),
+    0 -.35cqw .5cqw .25cqw rgba(0,0,0,.14),
+    inset 0 .7cqw 1.1cqw rgba(0,0,0,.10),
+    inset 0 -.5cqw .8cqw rgba(255,255,255,.8);
+}
+:root.framed .center{
+  background:
+    var(--grain-fine),
+    radial-gradient(circle at 36% 28%,#f4f4f5 0%,var(--btn-hi) 22%,var(--btn) 60%,var(--btn-lo) 100%);
+  background-size:90px 90px,auto;
+  box-shadow:
+    0 0 0 .25cqw rgba(0,0,0,.14),
+    0 .5cqw .7cqw rgba(0,0,0,.20),
+    inset 0 .45cqw .5cqw rgba(255,255,255,.65),
+    inset 0 -.6cqw .9cqw rgba(0,0,0,.14);
+}
+:root.framed.black .ipod::before{
+  box-shadow:0 0 0 .14cqw rgba(0,0,0,.5),inset 0 .45cqw .35cqw rgba(255,255,255,.18),inset 0 -.5cqw .55cqw rgba(0,0,0,.45);
+}
+:root.framed.black .wheel{background:var(--grain-fine),radial-gradient(circle at 45% 35%,#2a2b2e 0%,var(--wheel) 60%,#121214 100%);background-size:90px 90px,auto}
+
+/* ===== 実物大モード：本物の写真に合わせた修正（2026-11-26） =====
+   ・正面からは背面の鏡面は見えない。アルミのパネルの縁が丸く落ちていて、縁に沿って明るい帯ができる
+   ・ホイールは真っ白で平ら、パネルとほぼ面一。細い灰色の線で縁取られるだけで、へこみや陰影はほとんどない
+   ・中央ボタンは本体と同じアルミで平ら
+   ・液晶は太めの黒い枠。明るい縁取りはない */
+:root.framed .ipod{
+  background:var(--alu);background-size:var(--alu-size);border-radius:7.6cqw;
+  box-shadow:
+    inset 0 0 0 .14cqw rgba(0,0,0,.22),
+    inset 0 .55cqw .5cqw rgba(255,255,255,.85),
+    inset .5cqw 0 .6cqw rgba(255,255,255,.55),
+    inset 0 -.7cqw .9cqw rgba(0,0,0,.20),
+    inset -.55cqw 0 .8cqw rgba(0,0,0,.12),
+    0 .2cqw .3cqw rgba(0,0,0,.35),
+    .8cqw 2.2cqw 3cqw rgba(0,0,0,.18),
+    2.5cqw 7cqw 11cqw rgba(0,0,0,.14);
+}
+/* 縁の丸みに沿った明るい帯と、アルミの細かい梨地 */
+:root.framed .ipod::before{
+  inset:0;border-radius:inherit;
+  background:
+    linear-gradient(118deg,rgba(255,255,255,.22) 0%,rgba(255,255,255,0) 30%,rgba(255,255,255,0) 62%,rgba(255,255,255,.10) 70%,rgba(255,255,255,0) 80%),
+    var(--grain-fine),var(--mottle);
+  background-size:auto,90px 90px,400px 400px;
+  box-shadow:inset 0 0 1.4cqw .5cqw rgba(255,255,255,.28);
+}
+:root.framed.black .ipod::before{box-shadow:inset 0 0 1.4cqw .5cqw rgba(255,255,255,.06)}
+:root.framed .bezel{
+  padding:1.7cqw;border-radius:1.6cqw;
+  box-shadow:
+    0 0 0 .18cqw rgba(0,0,0,.35),
+    0 .3cqw .25cqw rgba(255,255,255,.6),
+    inset 0 .5cqw .8cqw rgba(0,0,0,.9);
+}
+:root.framed .lcd{border-radius:.3cqw}
+:root.framed .wheel{
+  background:var(--grain-fine),#f8f8f8;background-size:60px 60px,auto;
+  box-shadow:
+    0 0 0 .18cqw rgba(0,0,0,.13),
+    0 .2cqw .2cqw .1cqw rgba(255,255,255,.5),
+    inset 0 .15cqw .3cqw rgba(0,0,0,.05);
+}
+:root.framed.black .wheel{background:var(--grain-fine),#1c1c1e;background-size:60px 60px,auto}
+:root.framed .wheel .lab{color:#8f9297;font-size:4.1cqw;font-weight:600;letter-spacing:.04em}
+:root.framed .wheel .lab svg{width:5cqw;height:5cqw}
+:root.framed .center{
+  background:var(--grain-fine),var(--mottle),linear-gradient(172deg,var(--btn-hi),var(--btn) 70%);
+  background-size:60px 60px,400px 400px,auto;
+  box-shadow:
+    0 0 0 .18cqw rgba(0,0,0,.14),
+    inset 0 .25cqw .35cqw rgba(0,0,0,.07),
+    inset 0 -.2cqw .3cqw rgba(255,255,255,.35);
+}
+
+:root.framed:not(.black){--front:#d9dadc;--btn-hi:#dcdde0;--btn:#cfd0d3;--btn-lo:#c4c5c8}
+:root.framed .wheel{background:radial-gradient(circle at 50% 45%,#ffffff 0%,#fbfbfb 70%,#f3f3f3 100%)}
+:root.framed.black .wheel{background:#1c1c1e}
+:root.framed .ipod::before{box-shadow:inset 0 0 1.6cqw .7cqw rgba(255,255,255,.38)}
+
+/* ===== 実物大モード：真上から見た机の上の本体。立体感は影だけで出す（2026-11-26） =====
+   光は左上の少し遠くから。本体の縁は面取りで左上が明るく右下が暗い。
+   影は「縁ぎわの濃い接地影」「右下へずれる中くらいの影」「大きく広がる薄い影」を重ねる */
+:root.framed body{
+  background:radial-gradient(ellipse 90% 70% at 40% 35%,#ffffff 0%,#f8f8f9 55%,#ededef 100%);
+}
+:root.framed .ipod{
+  box-shadow:
+    inset 0 0 0 .14cqw rgba(0,0,0,.24),
+    inset .2cqw .7cqw .6cqw rgba(255,255,255,.9),
+    inset .6cqw .2cqw .7cqw rgba(255,255,255,.5),
+    inset -.3cqw -.9cqw 1.1cqw rgba(0,0,0,.24),
+    inset -.7cqw -.2cqw 1cqw rgba(0,0,0,.12),
+    0 0 0 .1cqw rgba(0,0,0,.18),
+    .15cqw .35cqw .45cqw rgba(0,0,0,.38),
+    .7cqw 1.5cqw 2cqw rgba(0,0,0,.24),
+    1.8cqw 4cqw 6cqw rgba(0,0,0,.18),
+    3.5cqw 9cqw 16cqw rgba(0,0,0,.14);
+}
+:root.framed.black .ipod{
+  box-shadow:
+    inset 0 0 0 .14cqw rgba(0,0,0,.5),
+    inset .2cqw .7cqw .6cqw rgba(255,255,255,.18),
+    inset -.3cqw -.9cqw 1.1cqw rgba(0,0,0,.5),
+    0 0 0 .1cqw rgba(0,0,0,.3),
+    .15cqw .35cqw .45cqw rgba(0,0,0,.45),
+    .7cqw 1.5cqw 2cqw rgba(0,0,0,.28),
+    1.8cqw 4cqw 6cqw rgba(0,0,0,.2),
+    3.5cqw 9cqw 16cqw rgba(0,0,0,.15);
+}
