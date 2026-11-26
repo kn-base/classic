@@ -129,7 +129,10 @@ const SP=(()=>{
       const ds=(await devices()).filter(d=>!d.is_restricted);
       const d=ds.find(x=>x.is_active)||ds.find(x=>/smartphone/i.test(x.type))||ds[0];
       if(!d)throw Object.assign(new Error("再生できる端末がありません"),{nodevice:true});
-      await api(path+(path.includes("?")?"&":"?")+"device_id="+encodeURIComponent(d.id),opt);
+      // まず「この端末で再生して」と再生先を切り替えてから、もう一度指示を送る
+      try{await api("/me/player",{method:"PUT",body:JSON.stringify({device_ids:[d.id],play:false})});await new Promise(r=>setTimeout(r,400))}catch(_){}
+      try{await api(path+(path.includes("?")?"&":"?")+"device_id="+encodeURIComponent(d.id),opt)}
+      catch(e2){if(e2.status===404||e2.reason==="NO_ACTIVE_DEVICE")e2.nodevice=true;throw e2}
     }
     setTimeout(refresh,500);setTimeout(refresh,1500);
   }

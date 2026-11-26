@@ -232,17 +232,40 @@ function spErrText(e){
   if(e.status===429)return "混み合っています。少し待ってください";
   return "失敗："+(e.message||"不明なエラー");
 }
-/* Spotify への指示を送る。失敗したら、理由と次にすることを出す */
+/* Spotify への指示を送る。失敗したら、理由と次にすることを出す。
+   Spotify アプリが眠っているときは、指示を覚えておき、Spotify アプリを開いて戻ってきたら自動でもう一度送る */
+let spPending=null;
+const isSleep=e=>e&&(e.nodevice||e.status===404||e.reason==="NO_ACTIVE_DEVICE");
 async function spRun(fn,goNow){
   if(goNow&&cv().type!=="now")push(nowView());
-  try{await fn()}
+  try{await fn();spPending=null}
   catch(e){
-    if(e.nodevice||e.status===404||e.reason==="NO_ACTIVE_DEVICE"){
-      push(menu("Spotify",()=>[{label:"Spotify アプリを開く",act:openSpotify},{label:"開いたら戻って、もう一度選ぶ",dis:true}]));
-      toast("Spotify アプリが眠っています。開いてから、もう一度選んでください");
+    if(isSleep(e)){
+      spPending={fn,at:Date.now()};
+      if(!(cv().type==="menu"&&cv().sleep)){const v=menu("Spotify",()=>[
+        {label:"Spotify アプリを開く",act:openSpotify},
+        {label:"もう一度試す",act:()=>spRetry(true)},
+        {label:"戻ると自動で再生します",dis:true}]);v.sleep=true;push(v)}
+      toast("Spotify アプリが眠っています。開いてから戻ってください");
     }else toast(spErrText(e));
   }
 }
+/* 覚えておいた指示を送り直す（Spotify アプリが目を覚ますまで少し待ちながら数回試す） */
+async function spRetry(manual){
+  const p=spPending;if(!p)return;
+  if(!manual&&Date.now()-p.at>10*60*1000){spPending=null;return}
+  toast("Spotify に再生を指示しています…");
+  for(let i=0;i<4;i++){
+    try{await p.fn();spPending=null;
+      while(stack.length>1&&cv().type==="menu"&&cv().sleep)stack.pop();
+      if(cv().type!=="now")stack.push(nowView());
+      render();toast("再生しました");return}
+    catch(e){if(!isSleep(e)){spPending=null;toast(spErrText(e));return}}
+    await new Promise(r=>setTimeout(r,1200));
+  }
+  toast("まだ届きません。Spotify アプリで何か1曲再生してから戻ってください");
+}
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&spPending&&SPM())setTimeout(()=>spRetry(false),600)});
 function spSettingsView(){return menu("Spotify",()=>SPM()?[
   {label:"接続テスト",sub:spTestView},
   {label:"Spotify アプリを開く",act:openSpotify},
