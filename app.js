@@ -449,7 +449,8 @@ if(typeof SP!=="undefined"){
   if(SP.connected())SP.refresh();
   setInterval(()=>{if(SPM()&&!document.hidden)SP.refresh()},3000);                       // 3秒ごとに再生状態をもらう
   setInterval(()=>{if(SPM()&&cv().type==="now"&&SP.state&&SP.state.playing)drawNow()},500); // 再生位置のバーを進める
-  document.addEventListener("visibilitychange",()=>{if(!document.hidden&&SPM())SP.refresh()});
+  // アプリに戻ってきたら、再生状態とライブラリを読み直す（今の画面がライブラリならすぐ読み直しが始まる）
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden&&SPM()){SP.refresh();SP.stale();const v=cv();if(v.type==="menu")drawMenu(v)}});
 }
 
 /* オフラインでも開けるようにする */

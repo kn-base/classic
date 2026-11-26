@@ -88,14 +88,23 @@ const SP=(()=>{
       album:a.name||"",art:pickArt(a.images||(t.images)),dur:t.duration_ms||0,no:t.track_number||0};
   };
 
-  /* ライブラリ（読み込んだものはこの画面を開いている間だけ覚えておく） */
-  const cache={};
-  function cached(key,fn){
-    const c=cache[key];if(c)return c;
-    cache[key]={loading:true};
-    fn().then(d=>{cache[key]={data:d};onChange()}).catch(e=>{cache[key]={err:e};onChange()});
-    return cache[key];
+  /* ライブラリ：読み込んだものを覚えておき、すぐ表示する。
+     ただし30秒以上たったもの・アプリに戻ってきたあとのものは、表示したまま裏で読み直し、
+     届いたら入れ替える（Spotify で削除・追加したものが Classic にもすぐ反映される） */
+  const cache={},MAXAGE=30000;
+  function load(key,fn){
+    const c=cache[key];if(c)c.busy=true;
+    fn().then(d=>{cache[key]={data:d,at:Date.now()};onChange()})
+      .catch(e=>{if(c&&c.data){c.busy=false;c.at=Date.now()}else cache[key]={err:e,at:Date.now()};onChange()});
   }
+  function cached(key,fn){
+    const c=cache[key];
+    if(!c){cache[key]={loading:true,busy:true};load(key,fn);return cache[key]}
+    if(!c.busy&&!c.loading&&Date.now()-(c.at||0)>MAXAGE)load(key,fn);
+    return c;
+  }
+  /* 「古くなった」印を付ける（次に表示するときに裏で読み直す） */
+  function stale(){for(const k in cache)if(cache[k])cache[k].at=0}
   const playlists=()=>cached("pl",async()=>(await pages("/me/playlists?limit=50"))
     .filter(Boolean).map(p=>({id:p.id,uri:p.uri,name:p.name||"",art:pickArt(p.images)})));
   const playlistTracks=id=>cached("pt:"+id,async()=>{
@@ -160,6 +169,6 @@ const SP=(()=>{
   return {
     connected:()=>!!tok,login,logout,handleRedirect,setOnChange:f=>{onChange=f},
     playlists,playlistTracks,savedTracks,savedAlbums,refresh,progress,get state(){return state},get lastErr(){return lastErr},
-    devices,playContext,playUris,toggle,next,prev,seek,me,api,log,
+    devices,playContext,playUris,toggle,next,prev,seek,me,api,log,stale,
   };
 })();
