@@ -394,3 +394,6 @@ body::before{
 :root.standalone.framed body::before{background:
   linear-gradient(180deg,rgba(237,237,239,0) 52%,#ededef 76%),
   radial-gradient(ellipse 90% 70% at 40% 35%,#ffffff 0%,#f8f8f9 55%,#ededef 100%)}
+
+/* 右側の文字（接続テストの結果など）が長いときは省略して、左の項目名を押し出さない */
+.row .r{max-width:62%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

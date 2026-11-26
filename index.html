@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.scdn.co https://*.spotifycdn.com; media-src 'self' blob: data:; connect-src 'self' https://api.spotify.com https://accounts.spotify.com; base-uri 'none'; form-action 'none'">
 <title>Classic</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -32,6 +32,7 @@
 </div>
 <input type="file" id="file" accept="audio/*" multiple hidden>
 <script src="vendor/jsmediatags.min.js"></script>
+<script src="spotify.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

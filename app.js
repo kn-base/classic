@@ -119,6 +119,8 @@ const audio=new Audio();audio.preload="auto";audio.setAttribute("playsinline",""
 const canVol=(()=>{const a=new Audio();a.volume=.5;return a.volume!==1})();
 let queue=[],qi=-1,curUrl=null;
 const cur=()=>queue[qi];
+/* Spotify につないでいるか（つないでいる間は、ライブラリも再生も Spotify を使う） */
+const SPM=()=>typeof SP!=="undefined"&&SP.connected();
 function load(play=true){
   const t=cur();if(!t)return;
   if(curUrl)URL.revokeObjectURL(curUrl);
@@ -148,7 +150,12 @@ const sortT=a=>a.slice().sort((x,y)=>x.album===y.album?(x.no-y.no)||x.title.loca
 const songItems=list=>list.map((t,i)=>({label:t.title,act:()=>playList(list,i)}));
 const menu=(title,items)=>({type:"menu",title,items,sel:0,top:0});
 
-function rootView(){return menu("Classic",()=>[
+function rootView(){return menu("Classic",()=>SPM()?[
+  {label:"ミュージック",sub:spMusicView},
+  {label:"シャッフル再生",act:spShuffle},
+  {label:"設定",sub:settingsView},
+  ...(SP.state&&SP.state.item?[{label:"再生中",sub:nowView}]:[]),
+]:[
   {label:"ミュージック",sub:musicView},
   {label:"シャッフル再生",act:shuffleAll},
   {label:"曲を追加",act:()=>$("#file").click()},
@@ -166,14 +173,87 @@ function artistView(ar,ts){const albums=[...new Set(ts.map(t=>t.album))];
   return menu(ar,()=>[{label:"すべての曲",sub:()=>menu(ar,()=>songItems(sortT(ts)))},
     ...albums.map(al=>({label:al,sub:()=>menu(al,()=>songItems(sortT(ts.filter(t=>t.album===al))))}))])}
 function settingsView(){return menu("設定",()=>[
+  {label:"Spotify",right:SPM()?"接続中":"未接続",sub:spSettingsView},
   {label:"クリック音",right:prefs.click?"オン":"オフ",act:()=>{prefs.click=!prefs.click;savePrefs();tick();render()}},
   {label:"本体カラー",right:prefs.body==="black"?"ブラック":"シルバー",act:()=>{prefs.body=prefs.body==="black"?"silver":"black";savePrefs();applyBody();render()}},
-  {label:"曲数",right:mine.length?mine.length+"曲":"デモ "+DEMO.length+"曲",dis:true},
-  ...(mine.length?[{label:"追加した曲を消去",sub:()=>menu("消去しますか？",()=>[
+  ...(SPM()?[]:[{label:"曲数",right:mine.length?mine.length+"曲":"デモ "+DEMO.length+"曲",dis:true}]),
+  ...(!SPM()&&mine.length?[{label:"追加した曲を消去",sub:()=>menu("消去しますか？",()=>[
     {label:"キャンセル",act:pop},
     {label:"すべて消去する",act:async()=>{await tx("readwrite",s=>s.clear());mine=[];audio.pause();queue=[];qi=-1;stack=[rootView()];toast("消去しました");render()}}])}]:[]),
 ])}
-function nowView(){return {type:"now",title:"再生中",mode:"",modeT:0}}
+function nowView(){return {type:"now",title:"再生中",mode:"",modeT:0,seekTo:null}}
+
+/* ---------- Spotify のメニュー ---------- */
+/* 読み込み中・失敗のときは、その旨を1行で出す */
+function asyncItems(c,mk){
+  if(c.loading)return [{label:"読み込み中…",dis:true}];
+  if(c.err)return [{label:spErrText(c.err),dis:true}];
+  const it=mk(c.data);return it.length?it:[{label:"（ありません）",dis:true}];
+}
+const byName=(a,b)=>a.name.localeCompare(b.name,"ja");
+const spSongs=(ts,play)=>ts.map((t,i)=>({label:t.title,act:()=>spRun(()=>play(i),true)}));
+function spMusicView(){return menu("ミュージック",()=>[
+  {label:"プレイリスト",sub:()=>menu("プレイリスト",()=>asyncItems(SP.playlists(),d=>d.map(p=>({label:p.name,
+    sub:()=>menu(p.name,()=>asyncItems(SP.playlistTracks(p.id),ts=>spSongs(ts,i=>SP.playContext(p.uri,ts[i].uri))))}))))},
+  {label:"アーティスト",sub:()=>menu("アーティスト",()=>asyncItems(SP.savedTracks(),d=>{
+    const m=new Map();for(const t of d){const a=t.artist.split(", ")[0]||"不明";if(!m.has(a))m.set(a,[]);m.get(a).push(t)}
+    return [...m].sort((a,b)=>a[0].localeCompare(b[0],"ja")).map(([a,ts])=>({label:a,
+      sub:()=>menu(a,()=>spSongs(ts,i=>SP.playUris(ts.map(t=>t.uri),i)))}))}))},
+  {label:"アルバム",sub:()=>menu("アルバム",()=>asyncItems(SP.savedAlbums(),d=>d.slice().sort(byName).map(a=>({label:a.name,
+    sub:()=>menu(a.name,()=>spSongs(a.tracks,i=>SP.playContext(a.uri,a.tracks[i].uri)))}))))},
+  {label:"曲",sub:()=>menu("曲",()=>asyncItems(SP.savedTracks(),d=>spSongs(d,i=>SP.playUris(d.map(t=>t.uri),i))))},
+])}
+function spShuffle(){
+  const c=SP.savedTracks();
+  if(!c.data){toast(c.err?spErrText(c.err):"ライブラリを読み込み中です。少し待ってからもう一度選んでください");return}
+  const a=c.data.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}
+  if(!a.length){toast("保存した曲がありません");return}
+  spRun(()=>SP.playUris(a.map(t=>t.uri),0),true);
+}
+const openSpotify=()=>{location.href="spotify:"};
+function spErrText(e){
+  if(e.nodevice||e.status===404||e.reason==="NO_ACTIVE_DEVICE")return "Spotify アプリが見つかりません";
+  if(e.status===403)return "操作できません（Premium が必要）";
+  if(e.status===401)return "ログインし直してください";
+  if(e.status===429)return "混み合っています。少し待ってください";
+  return "失敗："+(e.message||"不明なエラー");
+}
+/* Spotify への指示を送る。失敗したら、理由と次にすることを出す */
+async function spRun(fn,goNow){
+  if(goNow&&cv().type!=="now")push(nowView());
+  try{await fn()}
+  catch(e){
+    if(e.nodevice||e.status===404||e.reason==="NO_ACTIVE_DEVICE"){
+      push(menu("Spotify",()=>[{label:"Spotify アプリを開く",act:openSpotify},{label:"開いたら戻って、もう一度選ぶ",dis:true}]));
+      toast("Spotify アプリが眠っています。開いてから、もう一度選んでください");
+    }else toast(spErrText(e));
+  }
+}
+function spSettingsView(){return menu("Spotify",()=>SPM()?[
+  {label:"接続テスト",sub:spTestView},
+  {label:"Spotify アプリを開く",act:openSpotify},
+  {label:"ログアウト",sub:()=>menu("ログアウトしますか？",()=>[{label:"キャンセル",act:pop},
+    {label:"ログアウトする",act:()=>{SP.logout();stack=[rootView()];toast("ログアウトしました");render()}}])},
+]:[
+  {label:"Spotify にログイン",act:()=>{toast("Spotify のログイン画面を開きます");setTimeout(()=>SP.login(),300)}},
+  {label:"Premium と Spotify アプリが必要",dis:true},
+])}
+/* 接続テスト：ログイン・ライブラリ・端末・再生状態を順に確かめて、結果を右側に出す */
+function spTestView(){
+  const rows=[["ログイン","…"],["プレイリスト","…"],["保存した曲","…"],["保存したアルバム","…"],["再生できる端末","…"],["再生状態","…"]];
+  const v=menu("接続テスト",()=>rows.map(([l,r])=>({label:l,right:r})));
+  const set=(i,r)=>{rows[i][1]=r;if(cv()===v)drawMenu(v)};
+  const go=async(i,fn)=>{try{set(i,await fn())}catch(e){set(i,"NG "+(e.status||"")+" "+(e.reason||e.message||""))}};
+  (async()=>{
+    await go(0,async()=>{const m=await SP.me();return "OK "+((m&&(m.display_name||m.id))||"")});
+    await go(1,async()=>{const j=await SP.api("/me/playlists?limit=1");return "OK "+(j&&j.total!=null?j.total+"件":"")});
+    await go(2,async()=>{const j=await SP.api("/me/tracks?limit=1");return "OK "+(j&&j.total!=null?j.total+"曲":"")});
+    await go(3,async()=>{const j=await SP.api("/me/albums?limit=1");return "OK "+(j&&j.total!=null?j.total+"枚":"")});
+    await go(4,async()=>{const d=await SP.devices();return d.length?d.map(x=>x.name).join("、"):"なし（Spotify を開く）"});
+    await go(5,async()=>{await SP.refresh();if(SP.lastErr)throw SP.lastErr;const st=SP.state;return st&&st.item?(st.playing?"再生中":"一時停止中"):"止まっている"});
+  })();
+  return v;
+}
 
 let stack=[rootView()];
 const cv=()=>stack[stack.length-1];
@@ -190,8 +270,11 @@ function render(){
   fitRows();
   const v=cv();
   $("#ttl").textContent=v.title;
-  $("#st").textContent=cur()?(audio.paused?"❚❚":"▶"):"";
+  hdr();
   if(v.type==="menu")drawMenu(v);else drawNow(true);
+}
+function hdr(){
+  $("#st").textContent=SPM()?(SP.state&&SP.state.item?(SP.state.playing?"▶":"❚❚"):""):(cur()?(audio.paused?"❚❚":"▶"):"");
 }
 function drawMenu(v){
   const items=v.items();v.sel=Math.min(v.sel,Math.max(0,items.length-1));
@@ -206,7 +289,25 @@ function drawMenu(v){
   view.innerHTML=h;
 }
 function hue(s){let h=0;for(const c of String(s))h=(h*31+c.charCodeAt(0))>>>0;return h%360}
+/* Spotify の再生画面：Spotify から受け取った「今の曲」と再生位置を出す */
+let spDrawn=null;
+function drawNowSp(full){
+  const v=cv(),s=SP.state,t=s&&s.item;
+  if(!t){spDrawn=null;view.innerHTML='<div class="empty">Spotify で再生中の曲はありません<br>曲を選ぶと Spotify アプリで再生します</div>';return}
+  if(v.mode&&Date.now()-v.modeT>2500){v.mode="";v.seekTo=null}
+  const d=(t.dur||0)/1000,c=(v.seekTo!=null?v.seekTo:SP.progress())/1000,p=d>0?Math.min(100,c/d*100):0;
+  const bottom='<div class="meter"><i style="width:'+p+'%"></i>'+(v.mode==="scrub"?'<b style="left:'+p+'%"></b>':"")+
+    '</div><div class="times"><span>'+fmt(c)+"</span><span>-"+fmt(Math.max(0,d-c))+"</span></div>";
+  if(!full&&spDrawn===t.uri&&view.querySelector(".np")){view.querySelector(".np .bot").innerHTML=bottom;return}
+  spDrawn=t.uri;
+  const h=hue(t.album);
+  const art=t.art?'<img src="'+esc(t.art)+'" alt="">':'<div class="ph" style="background:linear-gradient(135deg,hsl('+h+' 60% 62%),hsl('+((h+50)%360)+' 55% 38%))">'+esc([...t.album][0]||"♪")+"</div>";
+  view.innerHTML='<div class="np"><div class="cnt">'+esc(s.device?s.device.name:"Spotify")+'</div><div class="main"><div class="art">'+art+
+    '</div><div class="meta"><div class="ti">'+esc(t.title)+'</div><div class="ar">'+esc(t.artist)+'</div><div class="al">'+esc(t.album)+
+    '</div></div></div><div class="bot" style="display:flex;flex-direction:column;gap:1.4cqw">'+bottom+"</div></div>";
+}
 function drawNow(full){
+  if(SPM())return drawNowSp(full);
   const v=cv(),t=cur();
   if(!t){view.innerHTML='<div class="empty">再生中の曲はありません</div>';return}
   if(v.mode&&Date.now()-v.modeT>2500)v.mode="";
@@ -227,9 +328,16 @@ function toast(msg){clearTimeout(toastT);let el=$("#lcd .toast");if(!el){el=docu
   el.textContent=msg;toastT=setTimeout(()=>el.remove(),1800)}
 
 /* ---------- 操作 ---------- */
+let seekT=null;
 function step(dir){
   const v=cv();wake();
   if(v.type==="menu"){const n=v.items().length,s=Math.max(0,Math.min(n-1,v.sel+dir));if(s!==v.sel){v.sel=s;tick();drawMenu(v)}return}
+  if(SPM()){   // Spotify：ホイールで早送り・巻き戻し（止めてから少しして、まとめて指示を送る）
+    if(!SP.state||!SP.state.item)return;
+    v.seekTo=Math.max(0,(v.seekTo!=null?v.seekTo:SP.progress())+dir*3000);v.mode="scrub";v.modeT=Date.now();tick();
+    clearTimeout(seekT);seekT=setTimeout(()=>{const to=v.seekTo;spRun(()=>SP.seek(to)).then(()=>{v.seekTo=null})},450);
+    drawNow();return;
+  }
   if(!cur())return;
   if(v.mode!=="scrub"&&canVol){audio.volume=Math.max(0,Math.min(1,audio.volume+dir*.04));v.mode="vol"}
   else{if(isFinite(audio.duration))audio.currentTime=Math.max(0,Math.min(audio.duration-.2,audio.currentTime+dir*3));v.mode="scrub"}
@@ -240,7 +348,10 @@ function select(){
   if(v.type==="menu"){const it=v.items()[v.sel];if(!it||it.dis)return;if(it.sub)push(it.sub());else it.act()}
   else{v.mode=v.mode==="scrub"?"":"scrub";v.modeT=Date.now();drawNow()}
 }
-const press={menu:()=>{tick();pop()},next:()=>{tick();if(cur())next()},prev:()=>{tick();if(cur())prev()},play:()=>{tick();playPause()}};
+const press={menu:()=>{tick();pop()},
+  next:()=>{tick();if(SPM())spRun(SP.next);else if(cur())next()},
+  prev:()=>{tick();if(SPM())spRun(()=>SP.progress()>3000?SP.seek(0):SP.prev());else if(cur())prev()},
+  play:()=>{tick();if(SPM())spRun(SP.toggle);else playPause()}};
 
 const wheel=$("#wheel");let drag=null;
 function flash(deg){const el=$("#press"),r=deg*Math.PI/180,x=50+Math.cos(r)*36,y=50+Math.sin(r)*36;
@@ -270,6 +381,20 @@ let idleT;function wake(){$("#lcd").classList.remove("dim");clearTimeout(idleT);
 
 openDB().then(async()=>{const all=await tx("readonly",s=>s.getAll());if(all&&all.length){mine=all;render()}});
 render();wake();
+
+/* ---------- Spotify の初期化 ---------- */
+if(typeof SP!=="undefined"){
+  // 再生状態が変わったら、見出しと今の画面だけ描き直す
+  SP.setOnChange(()=>{hdr();const v=cv();if(v.type==="now")drawNow(false);else drawMenu(v)});
+  SP.handleRedirect().then(r=>{
+    if(r==="ok"){stack=[rootView()];render();toast("Spotify につながりました");SP.refresh()}
+    else if(r)toast(r);
+  });
+  if(SP.connected())SP.refresh();
+  setInterval(()=>{if(SPM()&&!document.hidden)SP.refresh()},3000);                       // 3秒ごとに再生状態をもらう
+  setInterval(()=>{if(SPM()&&cv().type==="now"&&SP.state&&SP.state.playing)drawNow()},500); // 再生位置のバーを進める
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden&&SPM())SP.refresh()});
+}
 
 /* オフラインでも開けるようにする */
 if("serviceWorker" in navigator&&location.protocol==="https:"){navigator.serviceWorker.register("sw.js").catch(()=>{})}
