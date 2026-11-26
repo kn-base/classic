@@ -191,22 +191,36 @@ function asyncItems(c,mk){
   const it=mk(c.data);return it.length?it:[{label:"（ありません）",dis:true}];
 }
 const byName=(a,b)=>a.name.localeCompare(b.name,"ja");
+/* すべての曲＝保存した曲＋保存したアルバムの曲（重複は1つに）。並べ替えた結果は覚えておき、ホイールを回すたびに並べ直さない */
+let allMemo={a:null,t:null,v:null};
+function allSongs(){
+  const a=SP.savedAlbums(),t=SP.savedTracks();
+  if(a.loading||t.loading)return {loading:true};
+  if(a.err&&t.err)return {err:a.err};
+  if(allMemo.a===a.data&&allMemo.t===t.data&&allMemo.v)return allMemo.v;
+  const m=new Map();
+  for(const x of (t.data||[]))m.set(x.uri,x);
+  for(const al of (a.data||[]))for(const x of al.tracks)if(!m.has(x.uri))m.set(x.uri,x);
+  const songs=[...m.values()].sort((x,y)=>x.title.localeCompare(y.title,"ja"));
+  const ar=new Map();for(const x of songs){const n=x.artist.split(", ")[0]||"不明";if(!ar.has(n))ar.set(n,[]);ar.get(n).push(x)}
+  const artists=[...ar].sort((x,y)=>x[0].localeCompare(y[0],"ja"));
+  allMemo={a:a.data,t:t.data,v:{data:{songs,artists}}};
+  return allMemo.v;
+}
 const spSongs=(ts,play)=>ts.map((t,i)=>({label:t.title,act:()=>spRun(()=>play(i),true)}));
 function spMusicView(){return menu("ミュージック",()=>[
   {label:"プレイリスト",sub:()=>menu("プレイリスト",()=>asyncItems(SP.playlists(),d=>d.map(p=>({label:p.name,
     sub:()=>menu(p.name,()=>asyncItems(SP.playlistTracks(p.id),ts=>spSongs(ts,i=>SP.playContext(p.uri,ts[i].uri))))}))))},
-  {label:"アーティスト",sub:()=>menu("アーティスト",()=>asyncItems(SP.savedTracks(),d=>{
-    const m=new Map();for(const t of d){const a=t.artist.split(", ")[0]||"不明";if(!m.has(a))m.set(a,[]);m.get(a).push(t)}
-    return [...m].sort((a,b)=>a[0].localeCompare(b[0],"ja")).map(([a,ts])=>({label:a,
-      sub:()=>menu(a,()=>spSongs(ts,i=>SP.playUris(ts.map(t=>t.uri),i)))}))}))},
+  {label:"アーティスト",sub:()=>menu("アーティスト",()=>asyncItems(allSongs(),d=>d.artists.map(([a,ts])=>({label:a,
+      sub:()=>menu(a,()=>spSongs(ts,i=>SP.playUris(ts.map(t=>t.uri),i)))}))))},
   {label:"アルバム",sub:()=>menu("アルバム",()=>asyncItems(SP.savedAlbums(),d=>d.slice().sort(byName).map(a=>({label:a.name,
     sub:()=>menu(a.name,()=>spSongs(a.tracks,i=>SP.playContext(a.uri,a.tracks[i].uri)))}))))},
-  {label:"曲",sub:()=>menu("曲",()=>asyncItems(SP.savedTracks(),d=>spSongs(d,i=>SP.playUris(d.map(t=>t.uri),i))))},
+  {label:"曲",sub:()=>menu("曲",()=>asyncItems(allSongs(),d=>spSongs(d.songs,i=>SP.playUris(d.songs.map(t=>t.uri),i))))},
 ])}
 function spShuffle(){
-  const c=SP.savedTracks();
+  const c=allSongs();
   if(!c.data){toast(c.err?spErrText(c.err):"ライブラリを読み込み中です。少し待ってからもう一度選んでください");return}
-  const a=c.data.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}
+  const a=c.data.songs.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}
   if(!a.length){toast("保存した曲がありません");return}
   spRun(()=>SP.playUris(a.map(t=>t.uri),0),true);
 }
