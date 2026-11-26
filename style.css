@@ -343,3 +343,22 @@ body::before{
     1.8cqw 4cqw 6cqw rgba(0,0,0,.2),
     3.5cqw 9cqw 16cqw rgba(0,0,0,.15);
 }
+
+/* ===== 実物大モード：角と縁を実測に合わせる（2026-11-26） =====
+   正面写真2枚を実測：角の丸みの半径は本体の幅の約9.4%（約5.8mm）。
+   縁は「ふっくら広く明るい」のではなく、平らな面から細い面取りに落ちて、細い光の線が出るだけ */
+:root.framed .ipod{
+  border-radius:9.4cqw;
+  box-shadow:
+    inset 0 0 0 .12cqw rgba(0,0,0,.28),
+    inset .1cqw .35cqw .2cqw rgba(255,255,255,.95),
+    inset .3cqw .1cqw .25cqw rgba(255,255,255,.55),
+    inset -.15cqw -.4cqw .3cqw rgba(0,0,0,.22),
+    inset -.35cqw -.1cqw .35cqw rgba(0,0,0,.10),
+    0 0 0 .1cqw rgba(0,0,0,.18),
+    .15cqw .35cqw .45cqw rgba(0,0,0,.38),
+    .7cqw 1.5cqw 2cqw rgba(0,0,0,.24),
+    1.8cqw 4cqw 6cqw rgba(0,0,0,.18),
+    3.5cqw 9cqw 16cqw rgba(0,0,0,.14);
+}
+:root.framed .ipod::before{box-shadow:inset 0 0 0 .6cqw rgba(255,255,255,.10)}
