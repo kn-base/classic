@@ -1,4 +1,6 @@
 "use strict";
+/* 他人のサイトの中に枠として埋め込まれたら表示しない（だまして操作させる手口を防ぐ） */
+if(location.hostname==="kn-base.github.io"&&window.top!==window.self){document.documentElement.style.display="none";throw new Error("framed")}
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt=t=>{if(!isFinite(t)||t<0)t=0;t=Math.floor(t);return Math.floor(t/60)+":"+String(t%60).padStart(2,"0")};
