@@ -130,7 +130,12 @@ const SP=(()=>{
      ・Classic を開いていれば、10分たったところで Classic からも本当の一時停止を送る
      ・再開するときは、元の曲を止めた位置から再生し直し、くり返し再生の設定も元に戻す
      ・無音のあいだ、Classic の画面には元の曲を「一時停止中」として出す */
-  const SILENT="spotify:track:4KPym5ynDxNeAsgMqubgAt";   // 「30 Seconds of Silence! (Silent Track)」
+  /* 無音の曲は設定で選び直せる（最初は「30 Seconds of Silence! (Silent Track)」） */
+  const SKEY="cw-sp-silent";
+  let silent={uri:"spotify:track:4KPym5ynDxNeAsgMqubgAt",dur:29000,title:"30 Seconds of Silence! (Silent Track)",artist:"Telethon",art:null};
+  try{const v=JSON.parse(localStorage.getItem(SKEY)||"null");if(v&&/^spotify:track:[A-Za-z0-9]+$/.test(v.uri))silent=v}catch(e){}
+  const setSilent=t=>{silent={uri:t.uri,dur:t.dur||30000,title:t.title,artist:t.artist,art:t.art};try{localStorage.setItem(SKEY,JSON.stringify(silent))}catch(e){}};
+  const isSilent=u=>u===silent.uri;
   const HOLD_MS=10*60*1000;
   let hold=null,holdTimer=null,lastUris=null;
   const HKEY="cw-sp-hold";
@@ -143,7 +148,7 @@ const SP=(()=>{
     try{const j=await api("/me/player?additional_types=track,episode");
       const it=j&&j.item;
       if(hold){
-        if(it&&it.uri!==SILENT&&!(it.uri===hold.uri&&Date.now()-hold.at<8000)){   // 切り替え直後の数秒は除く
+        if(it&&!isSilent(it.uri)&&!(it.uri===hold.uri&&Date.now()-hold.at<8000)){   // 切り替え直後の数秒は除く
           // 無音のあいだに Spotify アプリで別の曲が再生された → 覚えていた曲は手放し、くり返し再生の設定だけ戻す
           const rep=hold.repeat;hold=null;saveHold();clearTimeout(holdTimer);
           try{await api("/me/player/repeat?state="+encodeURIComponent(rep||"off"),{method:"PUT"})}catch(_){}
@@ -183,11 +188,12 @@ const SP=(()=>{
 
   async function softPause(){
     const j=await api("/me/player?additional_types=track,episode");
-    if(!j||!j.item||j.item.uri===SILENT){await cmd("PUT","/me/player/pause");return}
+    if(!j||!j.item||isSilent(j.item.uri)){await cmd("PUT","/me/player/pause");return}
     hold={ctx:(j.context&&j.context.uri)||null,uri:j.item.uri,pos:j.progress_ms||0,repeat:j.repeat_state||"off",
       uris:(!j.context&&lastUris&&lastUris.includes(j.item.uri))?lastUris:null,item:norm(j.item),at:Date.now()};
     saveHold();state=heldView(j.device);onChange();
-    await cmd("PUT","/me/player/play",{uris:Array(21).fill(SILENT),offset:{position:0},position_ms:0});
+    const n=Math.min(100,Math.max(1,Math.ceil(HOLD_MS/Math.max(5000,silent.dur||30000))));   // 合計がちょうど約10分になる回数
+    await cmd("PUT","/me/player/play",{uris:Array(n).fill(silent.uri),offset:{position:0},position_ms:0});
     try{await api("/me/player/repeat?state=off",{method:"PUT"})}catch(_){}
     clearTimeout(holdTimer);holdTimer=setTimeout(hardPause,HOLD_MS);
   }
@@ -230,10 +236,20 @@ const SP=(()=>{
     await cmd("PUT","/me/player/seek?position_ms="+Math.max(0,Math.round(ms)));
   }
   const me=()=>api("/me");
+  /* 無音の曲の候補（いくつかの言葉で探して、15分以内の曲だけ、重なりを除いて並べる） */
+  const silentCandidates=()=>cached("silent",async()=>{
+    const m=new Map();
+    for(const q of ["silent track","silence","無音","blank track","empty track"]){
+      try{const j=await api("/search?type=track&limit=10&q="+encodeURIComponent(q));
+        for(const t of ((j&&j.tracks&&j.tracks.items)||[])){const n=norm(t);if(n&&n.dur&&n.dur<=15*60000&&!m.has(n.uri))m.set(n.uri,n)}}catch(e){}
+    }
+    if(!m.size)throw new Error("候補が見つかりませんでした");
+    return [...m.values()];
+  });
 
   return {
     connected:()=>!!tok,login,logout,handleRedirect,setOnChange:f=>{onChange=f},
     playlists,playlistTracks,savedTracks,savedAlbums,refresh,progress,get state(){return state},get lastErr(){return lastErr},
-    devices,playContext,playUris,toggle,next,prev,seek,me,api,log,stale,get holding(){return !!hold},
+    devices,playContext,playUris,toggle,next,prev,seek,me,api,log,stale,get holding(){return !!hold},get silent(){return silent},setSilent,silentCandidates,
   };
 })();
