@@ -121,7 +121,7 @@ const SP=(()=>{
   }).filter(Boolean));
 
   /* ---------- 再生の状態 ---------- */
-  let state=null,lastErr=null,trialDone=null;
+  let state=null,lastErr=null;
 
   /* ---------- 一時停止の代わりに無音で起こしておく ----------
      iPhone は音を出していない Spotify アプリを数秒で眠らせ、眠ると Classic から起こせない。
@@ -130,11 +130,9 @@ const SP=(()=>{
      ・Classic を開いていれば、10分たったところで Classic からも本当の一時停止を送る
      ・再開するときは、元の曲を止めた位置から再生し直し、くり返し再生の設定も元に戻す
      ・無音のあいだ、Classic の画面には元の曲を「一時停止中」として出す */
-  /* 無音の曲は設定で選び直せる（最初は「30 Seconds of Silence! (Silent Track)」） */
-  const SKEY="cw-sp-silent";
-  let silent={uri:"spotify:track:4KPym5ynDxNeAsgMqubgAt",dur:29000,title:"30 Seconds of Silence! (Silent Track)",artist:"Telethon",art:null};
-  try{const v=JSON.parse(localStorage.getItem(SKEY)||"null");if(v&&/^spotify:track:[A-Za-z0-9]+$/.test(v.uri))silent=v}catch(e){}
-  const setSilent=t=>{silent={uri:t.uri,dur:t.dur||30000,title:t.title,artist:t.artist,art:t.art};try{localStorage.setItem(SKEY,JSON.stringify(silent))}catch(e){}};
+  /* 無音の曲：持ち主が選んだ「Silent Track」（約10秒、ベルに斜線のジャケット） */
+  const silent={uri:"spotify:track:5XSKC4d0y0DfcGbvDOiL93",dur:10000};
+  try{localStorage.removeItem("cw-sp-silent")}catch(e){}   // 以前の「無音の曲を選ぶ」機能の保存を消す
   const isSilent=u=>u===silent.uri;
   const HOLD_MS=10*60*1000;
   let hold=null,holdTimer=null,lastUris=null;
@@ -148,7 +146,7 @@ const SP=(()=>{
     try{const j=await api("/me/player?additional_types=track,episode");
       const it=j&&j.item;
       if(hold){
-        if(it&&!isSilent(it.uri)&&it.uri!==trialUri&&it.uri!==trialDone&&!(it.uri===hold.uri&&Date.now()-hold.at<8000)){   // 切り替え直後の数秒は除く
+        if(it&&!isSilent(it.uri)&&!(it.uri===hold.uri&&Date.now()-hold.at<8000)){   // 切り替え直後の数秒は除く
           // 無音のあいだに Spotify アプリで別の曲が再生された → 覚えていた曲は手放し、くり返し再生の設定だけ戻す
           const rep=hold.repeat;hold=null;saveHold();clearTimeout(holdTimer);
           try{await api("/me/player/repeat?state="+encodeURIComponent(rep||"off"),{method:"PUT"})}catch(_){}
@@ -207,17 +205,15 @@ const SP=(()=>{
     const body=h.ctx?{context_uri:h.ctx,offset:{uri:h.uri},position_ms:h.pos}:
       {uris:h.uris||[h.uri],offset:{uri:h.uri},position_ms:h.pos};
     await cmd("PUT","/me/player/play",body);
-    hold=null;saveHold();clearTimeout(holdTimer);trialDone=null;
+    hold=null;saveHold();clearTimeout(holdTimer);
     try{await api("/me/player/repeat?state="+encodeURIComponent(h.repeat||"off"),{method:"PUT"})}catch(_){}
   }
   async function playContext(uri,trackUri){
-    trialDone=null;
     const rep=hold&&hold.repeat;hold=null;saveHold();clearTimeout(holdTimer);lastUris=null;
     await cmd("PUT","/me/player/play",{context_uri:uri,offset:{uri:trackUri},position_ms:0});
     if(rep)try{await api("/me/player/repeat?state="+encodeURIComponent(rep),{method:"PUT"})}catch(_){}
   }
   async function playUris(uris,pos){
-    trialDone=null;
     const rep=hold&&hold.repeat;hold=null;saveHold();clearTimeout(holdTimer);
     lastUris=uris.slice(pos,pos+100);
     await cmd("PUT","/me/player/play",{uris:lastUris,offset:{position:0},position_ms:0});
@@ -238,42 +234,9 @@ const SP=(()=>{
     await cmd("PUT","/me/player/seek?position_ms="+Math.max(0,Math.round(ms)));
   }
   const me=()=>api("/me");
-  /* 無音の曲の試し聴き：聴いていた曲は覚えておき（▶で止めた位置から再開できる）、候補を1曲くり返しで流す */
-  let trialUri=null,trialRepeat=null;   // trialDone：試し聴きを終えた曲（止まったまま残っていても「別の曲を再生した」とみなさない）
-  async function trial(uri){
-    const j=await api("/me/player?additional_types=track,episode");
-    if(!hold&&j&&j.item&&!isSilent(j.item.uri)&&j.item.uri!==uri&&trialUri===null){
-      hold={ctx:(j.context&&j.context.uri)||null,uri:j.item.uri,pos:j.progress_ms||0,repeat:j.repeat_state||"off",
-        uris:(!j.context&&lastUris&&lastUris.includes(j.item.uri))?lastUris:null,item:norm(j.item),at:Date.now()};saveHold();
-    }
-    if(trialUri===null)trialRepeat=(j&&j.repeat_state)||"off";
-    trialUri=uri;
-    await cmd("PUT","/me/player/play",{uris:[uri],offset:{position:0},position_ms:0});
-    try{await api("/me/player/repeat?state=track",{method:"PUT"})}catch(_){}
-  }
-  async function endTrial(){
-    if(trialUri===null)return;
-    trialDone=trialUri;trialUri=null;clearTimeout(holdTimer);
-    try{await api("/me/player/pause",{method:"PUT"})}catch(_){}
-    if(!hold){try{await api("/me/player/repeat?state="+encodeURIComponent(trialRepeat||"off"),{method:"PUT"})}catch(_){}}
-    setTimeout(refresh,500);
-  }
-  /* 無音の曲の候補（いくつかの言葉で探して、15分以内の曲だけ、重なりを除いて並べる） */
-  const silentCandidates=()=>cached("silent",async()=>{
-    const m=new Map();
-    for(const q of ["silent track","silence","無音","blank track","empty track"]){
-      try{const j=await api("/search?type=track&limit=10&q="+encodeURIComponent(q));
-        for(const t of ((j&&j.tracks&&j.tracks.items)||[])){const n=norm(t);if(n&&n.dur&&n.dur<=15*60000&&!m.has(n.uri))m.set(n.uri,n)}}catch(e){}
-    }
-    if(!m.size)throw new Error("候補が見つかりませんでした");
-    const score=t=>/^(silence|silent|silent track|無音|blank|blank track|empty|empty track)$/i.test(t.title.trim())?0:
-      /(silen|無音|blank|empty)/i.test(t.title)?1:2;
-    return [...m.values()].sort((a,b)=>score(a)-score(b)||a.dur-b.dur);
-  });
-
   return {
     connected:()=>!!tok,login,logout,handleRedirect,setOnChange:f=>{onChange=f},
     playlists,playlistTracks,savedTracks,savedAlbums,refresh,progress,get state(){return state},get lastErr(){return lastErr},
-    devices,playContext,playUris,toggle,next,prev,seek,me,api,log,stale,get holding(){return !!hold},get silent(){return silent},setSilent,silentCandidates,trial,endTrial,get trialUri(){return trialUri},
+    devices,playContext,playUris,toggle,next,prev,seek,me,api,log,stale,get holding(){return !!hold},
   };
 })();

@@ -284,8 +284,6 @@ async function spRetry(manual){
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&spPending&&SPM())setTimeout(()=>spRetry(false),600)});
 function spSettingsView(){return menu("Spotify",()=>SPM()?[
   {label:"接続テスト",sub:spTestView},
-  {label:"無音の曲",right:SP.silent.title,sub:()=>menu("無音の曲",()=>asyncItems(SP.silentCandidates(),d=>d.map(t=>({label:t.title,right:fmt(t.dur/1000),
-    sub:()=>({type:"pick",title:"無音の曲",t})}))))},
   {label:"通信の記録",sub:()=>menu("通信の記録",()=>SP.log.length?SP.log.map(x=>({label:(x.st<300?"○ ":"× ")+x.st+" "+x.m+" "+x.p,right:x.t,
     sub:()=>menu("記録の詳細",()=>[{label:"時刻",right:x.t},{label:"指示",right:x.m},{label:"結果",right:String(x.st)},
       ...chunks("宛先 "+x.p,22).map(t=>({label:t,dis:true})),...(x.why?chunks("理由 "+x.why,22).map(t=>({label:t,dis:true})):[])])})):[{label:"（まだありません）",dis:true}])},
@@ -329,7 +327,7 @@ function render(){
   const v=cv();
   $("#ttl").textContent=v.title;
   hdr();
-  if(v.type==="menu")drawMenu(v);else if(v.type==="pick")drawPick(v);else drawNow(true);
+  if(v.type==="menu")drawMenu(v);else drawNow(true);
 }
 function hdr(){
   $("#st").textContent=SPM()?(SP.state&&SP.state.item?(SP.state.playing?"▶":"❚❚"):""):(cur()?(audio.paused?"❚❚":"▶"):"");
@@ -364,15 +362,6 @@ function drawNowSp(full){
     '</div><div class="meta"><div class="ti">'+esc(t.title)+'</div><div class="ar">'+esc(t.artist)+'</div><div class="al">'+esc(t.album)+
     '</div></div></div><div class="bot" style="display:flex;flex-direction:column;gap:1.4cqw">'+bottom+"</div></div>";
 }
-/* 無音の曲の候補を、ジャケット付きで大きく見せる */
-function drawPick(v){
-  const t=v.t,h=hue(t.album),cur=SP.silent.uri===t.uri,on=SP.trialUri===t.uri;
-  const art=t.art?'<img src="'+esc(t.art)+'" alt="">':'<div class="ph" style="background:linear-gradient(135deg,hsl('+h+' 60% 62%),hsl('+((h+50)%360)+' 55% 38%))">'+esc([...t.album][0]||"♪")+"</div>";
-  view.innerHTML='<div class="np"><div class="cnt">'+(cur?"今使っている曲":"候補")+'</div><div class="main"><div class="art">'+art+
-    '</div><div class="meta"><div class="ti">'+esc(t.title)+'</div><div class="ar">'+esc(t.artist)+'</div><div class="al">'+esc(fmt(t.dur/1000))+
-    '</div></div></div><div class="times"><span>'+(on?"試し聴き中（音量を上げて確認）":"▶❚❚で試し聴き")+'</span></div>'+
-    '<div class="times"><span>真ん中で決定</span><span>MENUで戻る</span></div></div>';
-}
 function drawNow(full){
   if(SPM())return drawNowSp(full);
   const v=cv(),t=cur();
@@ -398,7 +387,6 @@ function toast(msg){clearTimeout(toastT);let el=$("#lcd .toast");if(!el){el=docu
 let seekT=null;
 function step(dir){
   const v=cv();wake();
-  if(v.type==="pick")return;
   if(v.type==="menu"){const n=v.items().length,s=Math.max(0,Math.min(n-1,v.sel+dir));if(s!==v.sel){v.sel=s;tick();drawMenu(v)}return}
   if(SPM()){   // Spotify：ホイールで早送り・巻き戻し（止めてから少しして、まとめて指示を送る）
     if(!SP.state||!SP.state.item)return;
@@ -414,15 +402,12 @@ function step(dir){
 function select(){
   const v=cv();wake();tick();
   if(v.type==="menu"){const it=v.items()[v.sel];if(!it||it.dis)return;if(it.sub)push(it.sub());else it.act()}
-  else if(v.type==="pick"){SP.endTrial();SP.setSilent(v.t);stack.pop();stack.pop();render();toast("無音の曲を「"+v.t.title+"」にしました")}
   else{v.mode=v.mode==="scrub"?"":"scrub";v.modeT=Date.now();drawNow()}
 }
-const press={menu:()=>{tick();if(cv().type==="pick")SP.endTrial();pop()},
+const press={menu:()=>{tick();pop()},
   next:()=>{tick();if(SPM())spRun(SP.next);else if(cur())next()},
   prev:()=>{tick();if(SPM())spRun(()=>SP.progress()>3000?SP.seek(0):SP.prev());else if(cur())prev()},
-  play:()=>{tick();const v=cv();
-    if(v.type==="pick"){if(SP.trialUri===v.t.uri)SP.endTrial().then(()=>drawPick(v));else spRun(()=>SP.trial(v.t.uri)).then(()=>{if(cv()===v)drawPick(v)});drawPick(v);return}
-    if(SPM())spRun(SP.toggle);else playPause()}};
+  play:()=>{tick();if(SPM())spRun(SP.toggle);else playPause()}};
 
 const wheel=$("#wheel");let drag=null;
 function flash(deg){const el=$("#press"),r=deg*Math.PI/180,x=50+Math.cos(r)*36,y=50+Math.sin(r)*36;
@@ -456,7 +441,7 @@ render();wake();
 /* ---------- Spotify の初期化 ---------- */
 if(typeof SP!=="undefined"){
   // 再生状態が変わったら、見出しと今の画面だけ描き直す
-  SP.setOnChange(()=>{hdr();const v=cv();if(v.type==="now")drawNow(false);else if(v.type==="menu")drawMenu(v)});
+  SP.setOnChange(()=>{hdr();const v=cv();if(v.type==="now")drawNow(false);else drawMenu(v)});
   SP.handleRedirect().then(r=>{
     if(r==="ok"){setAudioSession();stack=[rootView()];render();toast("Spotify につながりました");SP.refresh()}
     else if(r)toast(r);
