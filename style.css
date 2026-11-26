@@ -369,11 +369,15 @@ body::before{
 :root.framed{--dw:min(373px,calc(100vw - 32px),calc((100dvh - 56px) * .597))}
 :root.framed .ipod{width:var(--dw);border-radius:calc(var(--dw) * .1)}
 
-/* ホーム画面から開いたとき（全画面）：iPhone は「100%」の高さを時計のバーの分だけ短く伝えるため、
-   下に同じ高さの帯が残っていた。全画面のときだけ、画面の本当の高さ（100vh）で塗る */
+/* ホーム画面から開いたとき（全画面）：iPhone はアプリが使える高さを時計のバーの分だけ短く扱い、
+   画面の一番下にアプリの外側の帯が残る。背景を「画面の高さ＋時計のバーの高さ＋余裕」まで伸ばして、帯の部分も塗る。
+   実物大モードの白い机も同じように伸ばした面で塗る */
 @media (display-mode: standalone){
-  html,body{height:100vh;min-height:100vh}
-  body::before{inset:auto;top:0;left:0;width:100vw;height:100vh}
+  body::before{inset:auto;top:0;left:0;width:100vw;height:calc(100vh + env(safe-area-inset-top,0px) + 80px)}
+  :root.framed body::before{display:block;background:radial-gradient(ellipse 90% 70% at 40% 35%,#ffffff 0%,#f8f8f9 55%,#ededef 100%)}
+  html{background:var(--front)}
+  :root.framed{background:#ededef}
 }
-:root.standalone,:root.standalone body{height:100vh;min-height:100vh}
-:root.standalone body::before{inset:auto;top:0;left:0;width:100vw;height:100vh}
+:root.standalone body::before{inset:auto;top:0;left:0;width:100vw;height:calc(100vh + env(safe-area-inset-top,0px) + 80px)}
+:root.standalone.framed body::before{display:block;background:radial-gradient(ellipse 90% 70% at 40% 35%,#ffffff 0%,#f8f8f9 55%,#ededef 100%)}
+:root.standalone.framed{background:#ededef}
