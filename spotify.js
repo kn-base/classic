@@ -46,7 +46,7 @@ const SP=(()=>{
     try{await tokenReq({grant_type:"authorization_code",code:p.get("code"),redirect_uri:REDIRECT,client_id:CID,code_verifier:saved.v});
       return "ok"}catch(e){return "ログインに失敗しました（"+e.message+"）"}
   }
-  function logout(){tok=null;save();state=null;for(const k in cache)delete cache[k];onChange()}
+  function logout(){tok=null;save();state=null;hold=null;try{localStorage.removeItem("cw-sp-hold")}catch(e){}for(const k in cache)delete cache[k];onChange()}
   async function access(){
     if(!tok)throw Object.assign(new Error("ログインしていません"),{status:401});
     if(Date.now()>tok.exp){
@@ -122,13 +122,42 @@ const SP=(()=>{
 
   /* ---------- 再生の状態 ---------- */
   let state=null,lastErr=null;
+
+  /* ---------- 一時停止の代わりに無音で起こしておく ----------
+     iPhone は音を出していない Spotify アプリを数秒で眠らせ、眠ると Classic から起こせない。
+     そこで一時停止のときは、元の曲と位置を覚えておき、Spotify では無音の曲を約10分ぶんだけ流す。
+     ・無音の曲（約30秒）を21回並べて約10分。くり返し再生は一時的にオフにして、10分で自然に止まるようにする
+     ・Classic を開いていれば、10分たったところで Classic からも本当の一時停止を送る
+     ・再開するときは、元の曲を止めた位置から再生し直し、くり返し再生の設定も元に戻す
+     ・無音のあいだ、Classic の画面には元の曲を「一時停止中」として出す */
+  const SILENT="spotify:track:4KPym5ynDxNeAsgMqubgAt";   // 「30 Seconds of Silence! (Silent Track)」
+  const HOLD_MS=10*60*1000;
+  let hold=null,holdTimer=null,lastUris=null;
+  const HKEY="cw-sp-hold";
+  try{hold=JSON.parse(localStorage.getItem(HKEY)||"null")}catch(e){}
+  const saveHold=()=>{try{hold?localStorage.setItem(HKEY,JSON.stringify(hold)):localStorage.removeItem(HKEY)}catch(e){}};
+  const heldView=dev=>({playing:false,prog:hold.pos,at:Date.now(),item:hold.item,device:dev||(state&&state.device)||null});
+
   async function refresh(){
     if(!tok)return;
     try{const j=await api("/me/player?additional_types=track,episode");
-      state=j&&j.item?{playing:!!j.is_playing,prog:j.progress_ms||0,at:Date.now(),item:norm(j.item),device:j.device||null}:
-        (j?{playing:false,prog:0,at:Date.now(),item:null,device:j.device||null}:null);
+      const it=j&&j.item;
+      if(hold){
+        if(it&&it.uri!==SILENT&&!(it.uri===hold.uri&&Date.now()-hold.at<8000)){   // 切り替え直後の数秒は除く
+          // 無音のあいだに Spotify アプリで別の曲が再生された → 覚えていた曲は手放し、くり返し再生の設定だけ戻す
+          const rep=hold.repeat;hold=null;saveHold();clearTimeout(holdTimer);
+          try{await api("/me/player/repeat?state="+encodeURIComponent(rep||"off"),{method:"PUT"})}catch(_){}
+          state={playing:!!j.is_playing,prog:j.progress_ms||0,at:Date.now(),item:norm(it),device:j.device||null};
+        }else{
+          if(it&&j.is_playing&&Date.now()-hold.at>HOLD_MS)hardPause();   // 10分を過ぎていたら本当の一時停止
+          state=heldView(j&&j.device);
+        }
+      }else{
+        state=it?{playing:!!j.is_playing,prog:j.progress_ms||0,at:Date.now(),item:norm(it),device:j.device||null}:
+          (j?{playing:false,prog:0,at:Date.now(),item:null,device:j.device||null}:null);
+      }
       lastErr=null}
-    catch(e){lastErr=e}
+    catch(e){lastErr=e;if(hold)state=heldView()}
     onChange();
   }
   const progress=()=>state?Math.min((state.item&&state.item.dur)||Infinity,state.prog+(state.playing?Date.now()-state.at:0)):0;
@@ -151,16 +180,52 @@ const SP=(()=>{
     }
     setTimeout(refresh,500);setTimeout(refresh,1500);
   }
-  const playContext=(uri,trackUri)=>cmd("PUT","/me/player/play",{context_uri:uri,offset:{uri:trackUri},position_ms:0});
-  const playUris=(uris,pos)=>cmd("PUT","/me/player/play",{uris:uris.slice(pos,pos+100),offset:{position:0},position_ms:0});
+
+  async function softPause(){
+    const j=await api("/me/player?additional_types=track,episode");
+    if(!j||!j.item||j.item.uri===SILENT){await cmd("PUT","/me/player/pause");return}
+    hold={ctx:(j.context&&j.context.uri)||null,uri:j.item.uri,pos:j.progress_ms||0,repeat:j.repeat_state||"off",
+      uris:(!j.context&&lastUris&&lastUris.includes(j.item.uri))?lastUris:null,item:norm(j.item),at:Date.now()};
+    saveHold();state=heldView(j.device);onChange();
+    await cmd("PUT","/me/player/play",{uris:Array(21).fill(SILENT),offset:{position:0},position_ms:0});
+    try{await api("/me/player/repeat?state=off",{method:"PUT"})}catch(_){}
+    clearTimeout(holdTimer);holdTimer=setTimeout(hardPause,HOLD_MS);
+  }
+  async function hardPause(){
+    clearTimeout(holdTimer);
+    try{await api("/me/player/pause",{method:"PUT"})}catch(_){}
+  }
+  /* 覚えていた曲を、止めた位置から再生し直す */
+  async function resume(){
+    const h=hold;if(!h)return;
+    const body=h.ctx?{context_uri:h.ctx,offset:{uri:h.uri},position_ms:h.pos}:
+      {uris:h.uris||[h.uri],offset:{uri:h.uri},position_ms:h.pos};
+    await cmd("PUT","/me/player/play",body);
+    hold=null;saveHold();clearTimeout(holdTimer);
+    try{await api("/me/player/repeat?state="+encodeURIComponent(h.repeat||"off"),{method:"PUT"})}catch(_){}
+  }
+  async function playContext(uri,trackUri){
+    const rep=hold&&hold.repeat;hold=null;saveHold();clearTimeout(holdTimer);lastUris=null;
+    await cmd("PUT","/me/player/play",{context_uri:uri,offset:{uri:trackUri},position_ms:0});
+    if(rep)try{await api("/me/player/repeat?state="+encodeURIComponent(rep),{method:"PUT"})}catch(_){}
+  }
+  async function playUris(uris,pos){
+    const rep=hold&&hold.repeat;hold=null;saveHold();clearTimeout(holdTimer);
+    lastUris=uris.slice(pos,pos+100);
+    await cmd("PUT","/me/player/play",{uris:lastUris,offset:{position:0},position_ms:0});
+    if(rep)try{await api("/me/player/repeat?state="+encodeURIComponent(rep),{method:"PUT"})}catch(_){}
+  }
   async function toggle(){
+    if(hold){if(state){state.playing=true;state.at=Date.now();onChange()}return resume()}
     const was=state&&state.playing;
     if(state){state.prog=progress();state.at=Date.now();state.playing=!was;onChange()}  // 先に表示だけ切り替える
-    await cmd("PUT",was?"/me/player/pause":"/me/player/play");
+    if(was)return softPause();
+    await cmd("PUT","/me/player/play");
   }
-  const next=()=>cmd("POST","/me/player/next");
-  const prev=()=>cmd("POST","/me/player/previous");
+  async function next(){if(hold)await resume();await cmd("POST","/me/player/next")}
+  async function prev(){if(hold)await resume();await cmd("POST","/me/player/previous")}
   async function seek(ms){
+    if(hold){hold.pos=Math.max(0,Math.round(ms));saveHold();state=heldView();onChange();return}  // 止めている間は位置だけ覚え直す
     if(state){state.prog=Math.max(0,ms);state.at=Date.now();onChange()}
     await cmd("PUT","/me/player/seek?position_ms="+Math.max(0,Math.round(ms)));
   }
@@ -169,6 +234,6 @@ const SP=(()=>{
   return {
     connected:()=>!!tok,login,logout,handleRedirect,setOnChange:f=>{onChange=f},
     playlists,playlistTracks,savedTracks,savedAlbums,refresh,progress,get state(){return state},get lastErr(){return lastErr},
-    devices,playContext,playUris,toggle,next,prev,seek,me,api,log,stale,
+    devices,playContext,playUris,toggle,next,prev,seek,me,api,log,stale,get holding(){return !!hold},
   };
 })();
