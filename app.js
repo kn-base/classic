@@ -37,7 +37,13 @@ document.addEventListener("pointerup",e=>{const s=tapStart;tapStart=null;if(!s||
    ・アプリ内で作った効果音はマナーモードで消える
    そこで、触れるたびに準備を確かめて再開し、効果音を「音楽の再生」と同じ扱いにしてマナーモードでも鳴らす */
 let actx=null,clickBuf=null;
-try{if(navigator.audioSession)navigator.audioSession.type="playback"}catch(e){}
+/* ただし「音楽の再生」扱いの音は、ほかのアプリの音楽（Spotify）を止めてしまう。
+   Spotify につないでいる間は「ほかの音と混ぜて鳴らす」扱い（ambient）にして、Spotify を止めない。
+   その代わり、Spotify につないでいる間はマナーモードでクリック音が鳴らない */
+function setAudioSession(){
+  try{if(navigator.audioSession)navigator.audioSession.type=(typeof SP!=="undefined"&&SP.connected())?"ambient":"playback"}catch(e){}
+}
+setAudioSession();
 function audioReady(){
   try{
     if(!actx){
@@ -277,7 +283,7 @@ function spSettingsView(){return menu("Spotify",()=>SPM()?[
       ...chunks("宛先 "+x.p,22).map(t=>({label:t,dis:true})),...(x.why?chunks("理由 "+x.why,22).map(t=>({label:t,dis:true})):[])])})):[{label:"（まだありません）",dis:true}])},
   {label:"Spotify アプリを開く",act:openSpotify},
   {label:"ログアウト",sub:()=>menu("ログアウトしますか？",()=>[{label:"キャンセル",act:pop},
-    {label:"ログアウトする",act:()=>{SP.logout();stack=[rootView()];toast("ログアウトしました");render()}}])},
+    {label:"ログアウトする",act:()=>{SP.logout();setAudioSession();stack=[rootView()];toast("ログアウトしました");render()}}])},
 ]:[
   {label:"Spotify にログイン",act:()=>{toast("Spotify のログイン画面を開きます");setTimeout(()=>SP.login(),300)}},
   {label:"Premium と Spotify アプリが必要",dis:true},
@@ -431,7 +437,7 @@ if(typeof SP!=="undefined"){
   // 再生状態が変わったら、見出しと今の画面だけ描き直す
   SP.setOnChange(()=>{hdr();const v=cv();if(v.type==="now")drawNow(false);else drawMenu(v)});
   SP.handleRedirect().then(r=>{
-    if(r==="ok"){stack=[rootView()];render();toast("Spotify につながりました");SP.refresh()}
+    if(r==="ok"){setAudioSession();stack=[rootView()];render();toast("Spotify につながりました");SP.refresh()}
     else if(r)toast(r);
   });
   if(SP.connected())SP.refresh();
