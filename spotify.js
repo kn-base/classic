@@ -121,7 +121,7 @@ const SP=(()=>{
   }).filter(Boolean));
 
   /* ---------- 再生の状態 ---------- */
-  let state=null,lastErr=null;
+  let state=null,lastErr=null,trialDone=null;
 
   /* ---------- 一時停止の代わりに無音で起こしておく ----------
      iPhone は音を出していない Spotify アプリを数秒で眠らせ、眠ると Classic から起こせない。
@@ -148,7 +148,7 @@ const SP=(()=>{
     try{const j=await api("/me/player?additional_types=track,episode");
       const it=j&&j.item;
       if(hold){
-        if(it&&!isSilent(it.uri)&&!(it.uri===hold.uri&&Date.now()-hold.at<8000)){   // 切り替え直後の数秒は除く
+        if(it&&!isSilent(it.uri)&&it.uri!==trialUri&&it.uri!==trialDone&&!(it.uri===hold.uri&&Date.now()-hold.at<8000)){   // 切り替え直後の数秒は除く
           // 無音のあいだに Spotify アプリで別の曲が再生された → 覚えていた曲は手放し、くり返し再生の設定だけ戻す
           const rep=hold.repeat;hold=null;saveHold();clearTimeout(holdTimer);
           try{await api("/me/player/repeat?state="+encodeURIComponent(rep||"off"),{method:"PUT"})}catch(_){}
@@ -207,15 +207,17 @@ const SP=(()=>{
     const body=h.ctx?{context_uri:h.ctx,offset:{uri:h.uri},position_ms:h.pos}:
       {uris:h.uris||[h.uri],offset:{uri:h.uri},position_ms:h.pos};
     await cmd("PUT","/me/player/play",body);
-    hold=null;saveHold();clearTimeout(holdTimer);
+    hold=null;saveHold();clearTimeout(holdTimer);trialDone=null;
     try{await api("/me/player/repeat?state="+encodeURIComponent(h.repeat||"off"),{method:"PUT"})}catch(_){}
   }
   async function playContext(uri,trackUri){
+    trialDone=null;
     const rep=hold&&hold.repeat;hold=null;saveHold();clearTimeout(holdTimer);lastUris=null;
     await cmd("PUT","/me/player/play",{context_uri:uri,offset:{uri:trackUri},position_ms:0});
     if(rep)try{await api("/me/player/repeat?state="+encodeURIComponent(rep),{method:"PUT"})}catch(_){}
   }
   async function playUris(uris,pos){
+    trialDone=null;
     const rep=hold&&hold.repeat;hold=null;saveHold();clearTimeout(holdTimer);
     lastUris=uris.slice(pos,pos+100);
     await cmd("PUT","/me/player/play",{uris:lastUris,offset:{position:0},position_ms:0});
@@ -236,6 +238,26 @@ const SP=(()=>{
     await cmd("PUT","/me/player/seek?position_ms="+Math.max(0,Math.round(ms)));
   }
   const me=()=>api("/me");
+  /* 無音の曲の試し聴き：聴いていた曲は覚えておき（▶で止めた位置から再開できる）、候補を1曲くり返しで流す */
+  let trialUri=null,trialRepeat=null;   // trialDone：試し聴きを終えた曲（止まったまま残っていても「別の曲を再生した」とみなさない）
+  async function trial(uri){
+    const j=await api("/me/player?additional_types=track,episode");
+    if(!hold&&j&&j.item&&!isSilent(j.item.uri)&&j.item.uri!==uri&&trialUri===null){
+      hold={ctx:(j.context&&j.context.uri)||null,uri:j.item.uri,pos:j.progress_ms||0,repeat:j.repeat_state||"off",
+        uris:(!j.context&&lastUris&&lastUris.includes(j.item.uri))?lastUris:null,item:norm(j.item),at:Date.now()};saveHold();
+    }
+    if(trialUri===null)trialRepeat=(j&&j.repeat_state)||"off";
+    trialUri=uri;
+    await cmd("PUT","/me/player/play",{uris:[uri],offset:{position:0},position_ms:0});
+    try{await api("/me/player/repeat?state=track",{method:"PUT"})}catch(_){}
+  }
+  async function endTrial(){
+    if(trialUri===null)return;
+    trialDone=trialUri;trialUri=null;clearTimeout(holdTimer);
+    try{await api("/me/player/pause",{method:"PUT"})}catch(_){}
+    if(!hold){try{await api("/me/player/repeat?state="+encodeURIComponent(trialRepeat||"off"),{method:"PUT"})}catch(_){}}
+    setTimeout(refresh,500);
+  }
   /* 無音の曲の候補（いくつかの言葉で探して、15分以内の曲だけ、重なりを除いて並べる） */
   const silentCandidates=()=>cached("silent",async()=>{
     const m=new Map();
@@ -244,12 +266,14 @@ const SP=(()=>{
         for(const t of ((j&&j.tracks&&j.tracks.items)||[])){const n=norm(t);if(n&&n.dur&&n.dur<=15*60000&&!m.has(n.uri))m.set(n.uri,n)}}catch(e){}
     }
     if(!m.size)throw new Error("候補が見つかりませんでした");
-    return [...m.values()];
+    const score=t=>/^(silence|silent|silent track|無音|blank|blank track|empty|empty track)$/i.test(t.title.trim())?0:
+      /(silen|無音|blank|empty)/i.test(t.title)?1:2;
+    return [...m.values()].sort((a,b)=>score(a)-score(b)||a.dur-b.dur);
   });
 
   return {
     connected:()=>!!tok,login,logout,handleRedirect,setOnChange:f=>{onChange=f},
     playlists,playlistTracks,savedTracks,savedAlbums,refresh,progress,get state(){return state},get lastErr(){return lastErr},
-    devices,playContext,playUris,toggle,next,prev,seek,me,api,log,stale,get holding(){return !!hold},get silent(){return silent},setSilent,silentCandidates,
+    devices,playContext,playUris,toggle,next,prev,seek,me,api,log,stale,get holding(){return !!hold},get silent(){return silent},setSilent,silentCandidates,trial,endTrial,get trialUri(){return trialUri},
   };
 })();
