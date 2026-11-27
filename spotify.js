@@ -85,7 +85,7 @@ const SP=(()=>{
     if(!t||!t.uri||!/^spotify:(track|episode):/.test(t.uri))return null;
     const a=al||t.album||{};
     return {uri:t.uri,title:t.name||"",artist:(t.artists||[]).map(x=>x.name).join(", ")||(t.show&&t.show.name)||"",
-      album:a.name||"",art:pickArt(a.images||(t.images)),dur:t.duration_ms||0,no:t.track_number||0};
+      album:a.name||"",albumUri:a.uri||null,art:pickArt(a.images||(t.images)),dur:t.duration_ms||0,no:t.track_number||0,disc:t.disc_number||1};
   };
 
   /* ライブラリ：読み込んだものを覚えておき、すぐ表示する。

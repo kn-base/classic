@@ -224,12 +224,24 @@ const spSongs=(ts,play)=>ts.map((t,i)=>({label:t.title,act:()=>spRun(()=>play(i)
 function spMusicView(){return menu("ミュージック",()=>[
   {label:"プレイリスト",sub:()=>menu("プレイリスト",()=>asyncItems(SP.playlists(),d=>d.map(p=>({label:p.name,
     sub:()=>menu(p.name,()=>asyncItems(SP.playlistTracks(p.id),ts=>spSongs(ts,i=>SP.playContext(p.uri,ts[i].uri))))}))))},
-  {label:"アーティスト",sub:()=>menu("アーティスト",()=>asyncItems(allSongs(),d=>d.artists.map(([a,ts])=>({label:a,
-      sub:()=>menu(a,()=>spSongs(ts,i=>SP.playUris(ts.map(t=>t.uri),i)))}))))},
+  {label:"アーティスト",sub:()=>menu("アーティスト",()=>asyncItems(allSongs(),d=>d.artists.map(([a,ts])=>({label:a,sub:()=>spArtistView(a,ts)}))))},
   {label:"アルバム",sub:()=>menu("アルバム",()=>asyncItems(SP.savedAlbums(),d=>d.slice().sort(byName).map(a=>({label:a.name,
     sub:()=>menu(a.name,()=>spSongs(a.tracks,i=>SP.playContext(a.uri,a.tracks[i].uri)))}))))},
   {label:"曲",sub:()=>menu("曲",()=>asyncItems(allSongs(),d=>spSongs(d.songs,i=>SP.playUris(d.songs.map(t=>t.uri),i))))},
 ])}
+/* アーティスト → そのアーティストのアルバム → 曲（本物の iPod と同じ順番）。いちばん上は「すべての曲」 */
+const byTrackNo=(x,y)=>(x.album===y.album?0:x.album.localeCompare(y.album,"ja"))||(x.disc-y.disc)||(x.no-y.no)||x.title.localeCompare(y.title,"ja");
+function spArtistView(a,ts){
+  const albums=new Map();for(const t of ts){const k=t.album||"不明なアルバム";if(!albums.has(k))albums.set(k,[]);albums.get(k).push(t)}
+  const all=ts.slice().sort(byTrackNo);
+  return menu(a,()=>[
+    {label:"すべての曲",sub:()=>menu(a,()=>spSongs(all,i=>SP.playUris(all.map(t=>t.uri),i)))},
+    ...[...albums].sort((x,y)=>x[0].localeCompare(y[0],"ja")).map(([al,list])=>{
+      const songs=list.slice().sort(byTrackNo),au=songs[0]&&songs[0].albumUri;
+      return {label:al,sub:()=>menu(al,()=>spSongs(songs,i=>au?SP.playContext(au,songs[i].uri):SP.playUris(songs.map(t=>t.uri),i)))};
+    }),
+  ]);
+}
 function spShuffle(){
   const c=allSongs();
   if(!c.data){toast(c.err?spErrText(c.err):"ライブラリを読み込み中です。少し待ってからもう一度選んでください");return}
